@@ -82,7 +82,7 @@ export default async function HomePage() {
             <Link href="/ask" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-colors duration-200">
               Ask a Question
             </Link>
-            <SignOutButton />
+            {/* Removed the second SignOutButton here */}
           </div>
         )}
       </div>

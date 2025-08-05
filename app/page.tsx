@@ -25,13 +25,9 @@ export default async function HomePage() {
     redirect('/login');
   }
 
-  // Get the Twitter username from the user_metadata object
+  // Get the Twitter username from the user_metadata object.
+  // We've removed the redundant database query that was causing the error.
   const twitterUsername = session.user.user_metadata?.user_name || session.user.email;
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('username')
-    .eq('id', session.user.id)
-    .single();
 
   // Fetch all questions from the 'questions' table, ordering them by creation date
   const { data: questions, error } = await supabase
@@ -48,7 +44,7 @@ export default async function HomePage() {
     <div className="space-y-6 p-4 sm:p-6 md:p-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-0">
-          Hello, {profile?.username || twitterUsername}
+          Hello, {twitterUsername}
         </h1>
         {session && (
           <div className="flex items-center space-x-4">
@@ -83,3 +79,4 @@ export default async function HomePage() {
     </div>
   );
 }
+

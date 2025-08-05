@@ -43,9 +43,10 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   }
 
   // --- FETCH ALL PROFILES SEPARATELY FIRST ---
+  // Now fetching 'is_admin' as well
   const { data: profilesData, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, username, avatar_url');
+    .select('id, username, avatar_url, is_admin'); // <-- Added is_admin here
 
   if (profilesError) {
     console.error('Error fetching profiles:', profilesError);
@@ -119,7 +120,15 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
               className="w-6 h-6 rounded-full mr-2"
             />
           )}
-          Asked by {question.authorProfile?.username || 'Anonymous'} on {new Date(question.created_at).toLocaleDateString()}
+          <span className="flex items-center">
+            Asked by {question.authorProfile?.username || 'Anonymous'}
+            {question.authorProfile?.is_admin && ( // <-- NEW: Admin badge for question author
+              <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
+                Admin
+              </span>
+            )}
+          </span>
+          <span className="ml-1">on {new Date(question.created_at).toLocaleString()}</span>
         </Link>
       </div>
 
@@ -147,14 +156,14 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
                       className="w-5 h-5 rounded-full mr-2"
                     />
                   )}
-                  <span className="font-medium text-gray-800">
+                  <span className="font-medium text-gray-800 flex items-center">
                     {comment.authorProfile?.username || 'Anonymous'}
+                    {comment.authorProfile?.is_admin && ( // <-- NEW: Admin badge for comment author
+                      <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
+                        Admin
+                      </span>
+                    )}
                   </span>
-                  {comment.is_admin_comment && (
-                    <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
-                      Admin
-                    </span>
-                  )}
                   <span className="text-xs text-gray-500 ml-auto">
                     {new Date(comment.created_at).toLocaleString()}
                   </span>

@@ -1,17 +1,25 @@
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { Database } from '@/types/supabase';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import SignOutButton from '@/components/SignOutButton';
-import CreateQuestion from '@/components/CreateQuestion';
-import ListQuestions from '@/components/ListQuestions';
+import SignOutButton from '@/components/SignOutButton'; // Assuming you have this component
+
+// Define the type for a question from your database
+interface Question {
+  id: number;
+  title: string;
+  details: string;
+  created_at: string;
+  user_id: string;
+}
 
 export default async function HomePage() {
+  // Create a Supabase client on the server side
   const supabase = createServerComponentClient<Database>({ cookies });
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  // Fetch the user to determine if they are logged in
+  const { data: { session } } = await supabase.auth.getSession();
 
   if (!session) {
     redirect('/login');
@@ -25,19 +33,52 @@ export default async function HomePage() {
     .eq('id', session.user.id)
     .single();
 
-  return (
-    <div className="bg-gray-50 dark:bg-gray-900 min-h-screen p-4 sm:p-6 md:p-8">
-      <div className="max-w-2xl mx-auto space-y-8">
-        <header className="flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
-          {/* Display the Twitter username */}
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-            Hello, {profile?.username || twitterUsername}
-          </h1>
-          <SignOutButton />
-        </header>
+  // Fetch all questions from the 'questions' table, ordering them by creation date
+  const { data: questions, error } = await supabase
+    .from('questions')
+    .select('*')
+    .order('created_at', { ascending: false });
 
-        <CreateQuestion />
-        <ListQuestions />
+  if (error) {
+    console.error('Error fetching questions:', error);
+    return <p className="text-red-500 text-center">Failed to load questions.</p>;
+  }
+
+  return (
+    <div className="space-y-6 p-4 sm:p-6 md:p-8">
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-4 sm:mb-0">
+          Hello, {profile?.username || twitterUsername}
+        </h1>
+        {session && (
+          <div className="flex items-center space-x-4">
+            <Link href="/ask" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-colors duration-200">
+              Ask a Question
+            </Link>
+            <SignOutButton />
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-6">
+        <h2 className="text-xl font-semibold">Latest Questions</h2>
+        {questions && questions.length > 0 ? (
+          <ul className="space-y-4">
+            {questions.map((question: Question) => (
+              <li key={question.id} className="p-4 border border-gray-200 rounded-lg shadow-sm bg-white hover:shadow-md transition-shadow duration-200">
+                <h3 className="text-lg font-medium text-gray-900">{question.title}</h3>
+                <p className="text-sm text-gray-600 mt-1">{question.details}</p>
+                <div className="text-xs text-gray-400 mt-2">
+                  Asked on {new Date(question.created_at).toLocaleDateString()}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="p-8 text-center text-gray-500 bg-gray-50 rounded-lg shadow-inner">
+            <p className="text-lg">No questions yet. Be the first to ask one!</p>
+          </div>
+        )}
       </div>
     </div>
   );

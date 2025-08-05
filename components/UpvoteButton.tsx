@@ -6,38 +6,30 @@ import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Database } from '@/types/supabase';
 
 interface UpvoteButtonProps {
-  initialUpvotes: number; // Keep this prop for initial render, but useEffect will re-fetch
+  initialUpvotes: number;
   questionId: number;
 }
 
 export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButtonProps) {
-  const [upvotes, setUpvotes] = useState(initialUpvotes); // Initialize with prop
+  // Initialize upvotes state directly from the prop
+  const [upvotes, setUpvotes] = useState(initialUpvotes);
   const [hasUpvoted, setHasUpvoted] = useState(false);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const supabase = createClientComponentClient<Database>();
 
+  // This useEffect will now only synchronize the internal state with the prop
+  // when the prop itself changes (which it should, as the parent is now force-refreshing)
   useEffect(() => {
-    async function fetchUpvoteData() {
+    setUpvotes(initialUpvotes);
+  }, [initialUpvotes]);
+
+
+  useEffect(() => {
+    async function checkUpvoteStatus() {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Fetch the current upvote count for this question directly from the database
-      const { data: questionData, error: questionError } = await supabase
-        .from('questions')
-        .select('upvotes')
-        .eq('id', questionId)
-        .single();
-
-      if (questionError || !questionData) {
-        console.error('Error fetching current question upvotes:', questionError);
-        // Fallback to initialUpvotes if fetching fails
-        setUpvotes(initialUpvotes);
-      } else {
-        setUpvotes(questionData.upvotes); // Update state with actual database count
-      }
-
-      // Check if the current user has upvoted this question
       if (user) {
         const { count, error } = await supabase
           .from('user_upvotes')
@@ -46,7 +38,7 @@ export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButto
           .eq('question_id', questionId);
 
         if (error) {
-          console.error('Error checking user upvote status:', error);
+          console.error('Error checking upvote status:', error);
         } else {
           setHasUpvoted(count > 0);
         }
@@ -54,8 +46,8 @@ export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButto
       setLoading(false);
     }
 
-    fetchUpvoteData();
-  }, [questionId, supabase]); // Depend on questionId and supabase client
+    checkUpvoteStatus();
+  }, [questionId, supabase]);
 
   const handleUpvote = async () => {
     if (loading) return;
@@ -80,9 +72,10 @@ export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButto
 
       if (response.ok) {
         const data = await response.json();
-        setUpvotes(data.newUpvoteCount); // Update local state immediately
-        setHasUpvoted(!hasUpvoted); // Toggle upvote status
-        router.refresh(); // Trigger a full page re-render, which will re-run useEffect above
+        // Update local state immediately for responsiveness
+        setUpvotes(data.newUpvoteCount);
+        setHasUpvoted(!hasUpvoted);
+        router.refresh(); // Trigger a full page re-render
       } else {
         const errorData = await response.json();
         console.error('Failed to update upvote:', errorData.error);

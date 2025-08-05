@@ -1,7 +1,7 @@
+'use client'; // <-- THIS MUST BE THE VERY FIRST LINE
+
 // Force dynamic rendering for this page to ensure fresh data on every request
 export const dynamic = 'force-dynamic';
-
-'use client';
 
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -81,7 +81,6 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       setUserRole(currentUserProfile?.role || 'user');
 
       // --- FETCH THE SPECIFIC QUESTION ---
-      // Data will be fresh due to 'force-dynamic' on the page
       const { data: questionRaw, error: questionError } = await supabase
         .from('questions')
         .select('*')
@@ -100,7 +99,6 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       });
 
       // --- FETCH COMMENTS FOR THIS QUESTION ---
-      // Data will be fresh due to 'force-dynamic' on the page
       const { data: commentsRaw, error: commentsError } = await supabase
         .from('comments')
         .select('*')

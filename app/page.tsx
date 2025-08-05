@@ -4,16 +4,21 @@ import { Database } from '@/types/supabase';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import SignOutButton from '@/components/SignOutButton';
-import UpvoteButton from '@/components/UpvoteButton'; // Import the new component
+import UpvoteButton from '@/components/UpvoteButton';
 
-// Define the type for a question from your database
+// Define the type for a question with its author's profile
 interface Question {
   id: number;
   title: string;
   details: string;
   created_at: string;
   user_id: string;
-  upvotes: number; // Add the new upvotes field
+  upvotes: number;
+  // Include the joined profile data
+  profiles: {
+    username: string | null;
+    avatar_url: string | null;
+  } | null; // profiles can be null if no matching profile is found
 }
 
 export default async function HomePage() {
@@ -29,9 +34,10 @@ export default async function HomePage() {
 
   const twitterUsername = session.user.user_metadata?.user_name || session.user.email;
 
+  // Fetch questions and join with the profiles table to get author details
   const { data: questions, error } = await supabase
     .from('questions')
-    .select('*')
+    .select('*, profiles(username, avatar_url)') // Select all from questions, and specific fields from profiles
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -61,14 +67,20 @@ export default async function HomePage() {
           <ul className="space-y-4">
             {questions.map((question: Question) => (
               <li key={question.id} className="p-4 border border-gray-200 rounded-lg shadow-sm bg-white hover:shadow-md transition-shadow duration-200 flex justify-between items-center">
-                <div>
+                <div className="flex-grow">
                   <h3 className="text-lg font-medium text-gray-900">{question.title}</h3>
                   <p className="text-sm text-gray-600 mt-1">{question.details}</p>
-                  <div className="text-xs text-gray-400 mt-2">
-                    Asked on {new Date(question.created_at).toLocaleDateString()}
+                  <div className="flex items-center text-xs text-gray-400 mt-2">
+                    {question.profiles?.avatar_url && (
+                      <img
+                        src={question.profiles.avatar_url}
+                        alt="Author Avatar"
+                        className="w-5 h-5 rounded-full mr-2"
+                      />
+                    )}
+                    Asked by {question.profiles?.username || 'Anonymous'} on {new Date(question.created_at).toLocaleDateString()}
                   </div>
                 </div>
-                {/* Add the UpvoteButton component here */}
                 <UpvoteButton initialUpvotes={question.upvotes} questionId={question.id} />
               </li>
             ))}

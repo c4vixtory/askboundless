@@ -4,14 +4,14 @@ import { Database } from '@/types/supabase';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-// Define types for Question, Comment, and Profile rows from the database
+// Define base types from the database
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 type QuestionRow = Database['public']['Tables']['questions']['Row'];
 type CommentRow = Database['public']['Tables']['comments']['Row'];
 
 // Combined types for data with manually joined profiles
 type QuestionWithProfile = QuestionRow & {
-  profiles: Partial<ProfileRow> | null; // Profile for the question author
+  authorProfile: Partial<ProfileRow> | null; // Profile for the question author
 };
 
 type CommentWithProfile = CommentRow & {
@@ -41,20 +41,45 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
     redirect('/login'); // Redirect if not logged in
   }
 
-  // --- FETCH QUESTION AND ITS AUTHOR ---
-  // We'll keep the join here as this specific error seems to be for comments-profiles.
-  const { data: questionData, error: questionError } = await supabase
+  // --- FETCH ALL PROFILES SEPARATELY FIRST ---
+  // This ensures we have all profile data before attempting any joins.
+  const { data: profilesData, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, username, avatar_url'); // Only fetch necessary profile fields
+
+  if (profilesError) {
+    console.error('Error fetching profiles:', profilesError);
+    // Decide how to handle this: for now, proceed, authors will show 'Anonymous'
+  }
+
+  // Create a map for quick profile lookup by ID
+  const profilesMap = new Map<string, Partial<ProfileRow>>();
+  profilesData?.forEach(profile => {
+    if (profile.id) {
+      profilesMap.set(profile.id, profile);
+    }
+  });
+
+  // --- FETCH THE SPECIFIC QUESTION (NO JOIN HERE) ---
+  const { data: questionRaw, error: questionError } = await supabase
     .from('questions')
-    .select('*, profiles(id, username, avatar_url)')
+    .select('*') // Select all columns from the questions table, NO JOIN HERE
     .eq('id', questionId)
     .single();
 
-  if (questionError || !questionData) {
+  if (questionError || !questionRaw) {
     console.error('Error fetching question:', questionError);
     return <p className="text-red-500 text-center py-10">Failed to load question.</p>;
   }
 
-  // --- FETCH COMMENTS (WITHOUT JOIN) ---
+  // Manually attach the author's profile to the question
+  const question: QuestionWithProfile = {
+    ...questionRaw,
+    authorProfile: profilesMap.get(questionRaw.user_id) || null,
+  };
+
+
+  // --- FETCH COMMENTS FOR THIS QUESTION (NO JOIN HERE) ---
   const { data: commentsRaw, error: commentsError } = await supabase
     .from('comments')
     .select('*') // Select all columns from the comments table, NO JOIN HERE
@@ -67,32 +92,11 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
     return <p className="text-red-500 text-center py-10">Failed to load comments.</p>;
   }
 
-  // --- FETCH ALL PROFILES SEPARATELY ---
-  const { data: profilesData, error: profilesError } = await supabase
-    .from('profiles')
-    .select('id, username, avatar_url'); // Only fetch necessary profile fields
-
-  if (profilesError) {
-    console.error('Error fetching profiles:', profilesError);
-    // Log the error but proceed, comments will show 'Anonymous' if profiles fail
-  }
-
   // --- MANUALLY JOIN COMMENTS WITH PROFILES ---
-  // Create a map for quick profile lookup by ID
-  const profilesMap = new Map<string, Partial<ProfileRow>>();
-  profilesData?.forEach(profile => {
-    if (profile.id) {
-      profilesMap.set(profile.id, profile);
-    }
-  });
-
-  // Map raw comments to comments with author profiles
   const comments: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
     ...comment,
     authorProfile: profilesMap.get(comment.user_id) || null, // Attach profile or null
   }));
-
-  const question: QuestionWithProfile = questionData; // Type assertion
 
   return (
     <div className="max-w-3xl mx-auto py-10 px-4 space-y-8">
@@ -109,14 +113,14 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
         <h1 className="text-2xl font-bold text-gray-900 mb-2">{question.title}</h1>
         <p className="text-gray-700 mb-4">{question.details}</p>
         <div className="flex items-center text-sm text-gray-500">
-          {question.profiles?.avatar_url && (
+          {question.authorProfile?.avatar_url && ( // Changed from question.profiles
             <img
-              src={question.profiles.avatar_url}
+              src={question.authorProfile.avatar_url} // Changed from question.profiles
               alt="Author Avatar"
               className="w-6 h-6 rounded-full mr-2"
             />
           )}
-          Asked by {question.profiles?.username || 'Anonymous'} on {new Date(question.created_at).toLocaleDateString()}
+          Asked by {question.authorProfile?.username || 'Anonymous'} on {new Date(question.created_at).toLocaleDateString()} {/* Changed from question.profiles */}
         </div>
       </div>
 
@@ -137,9 +141,9 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
                 }`}
               >
                 <div className="flex items-center mb-2">
-                  {comment.authorProfile?.avatar_url && (
+                  {comment.authorProfile?.avatar_url && ( // Changed from comment.profiles
                     <img
-                      src={comment.authorProfile.avatar_url}
+                      src={comment.authorProfile.avatar_url} // Changed from comment.profiles
                       alt="Commenter Avatar"
                       className="w-5 h-5 rounded-full mr-2"
                     />

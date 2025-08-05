@@ -7,9 +7,29 @@ export async function POST(request: Request) {
   const { question_id, user_id, content } = await request.json();
   const supabase = createRouteHandlerClient<Database>({ cookies });
 
-  // For now, is_admin_comment is always false.
-  // We'll implement admin detection later.
-  const is_admin_comment = false; 
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session || session.user.id !== user_id) {
+    return NextResponse.json({ error: 'Unauthorized: User ID mismatch or not logged in.' }, { status: 401 });
+  }
+
+  // --- Determine if the comment should be marked as an admin comment ---
+  let shouldBeAdminComment = false;
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user_id)
+    .single();
+
+  if (profileError) {
+    console.error('Error fetching profile for comment admin check:', profileError);
+  } else {
+    const userRole = profile?.role || 'user';
+    if (userRole === 'admin' || userRole === 'me' || userRole === 'og') { // <-- NEW: Check for 'og' role
+      shouldBeAdminComment = true;
+    }
+  }
+  // --- END NEW ---
 
   try {
     const { data, error } = await supabase
@@ -18,10 +38,10 @@ export async function POST(request: Request) {
         question_id,
         user_id,
         content,
-        is_admin_comment,
+        is_admin_comment: shouldBeAdminComment,
       })
-      .select() // Select the inserted row to return it
-      .single(); // Expect a single inserted row
+      .select()
+      .single();
 
     if (error) {
       console.error('Error inserting comment:', error);
@@ -34,4 +54,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'An unexpected error occurred.' }, { status: 500 });
   }
 }
-

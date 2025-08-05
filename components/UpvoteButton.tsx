@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation'; // Keep this import
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Database } from '@/types/supabase';
 
@@ -14,6 +14,7 @@ export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButto
   const [upvotes, setUpvotes] = useState(initialUpvotes);
   const [hasUpvoted, setHasUpvoted] = useState(false);
   const [loading, setLoading] = useState(true);
+  const router = useRouter(); // <--- ADD THIS LINE
   const supabase = createClientComponentClient<Database>();
 
   useEffect(() => {
@@ -53,21 +54,19 @@ export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButto
     }
 
     try {
-      // Send the current 'hasUpvoted' state to the API route.
-      // The API route will then perform the opposite action.
       const response = await fetch('/api/upvote', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ questionId, userId: user.id, isCurrentlyUpvoted: hasUpvoted }), // Renamed hasUpvoted to isCurrentlyUpvoted for clarity
+        body: JSON.stringify({ questionId, userId: user.id, isCurrentlyUpvoted: hasUpvoted }),
       });
 
       if (response.ok) {
         const data = await response.json();
         setUpvotes(data.newUpvoteCount);
-        setHasUpvoted(!hasUpvoted); // Toggle the state after successful API call
-        router.refresh(); // Refresh the page to ensure data consistency
+        setHasUpvoted(!hasUpvoted);
+        router.refresh();
       } else {
         const errorData = await response.json();
         console.error('Failed to update upvote:', errorData.error);
@@ -96,7 +95,6 @@ export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButto
         viewBox="0 0 20 20"
         fill="currentColor"
       >
-        {/* Corrected SVG path for an UP arrow */}
         <path
           fillRule="evenodd"
           d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 8.293a1 1 0 01-1.414 0z"

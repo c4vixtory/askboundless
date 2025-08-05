@@ -8,13 +8,16 @@ export default function LoginPage() {
   const supabase = createPagesBrowserClient<Database>();
 
   useEffect(() => {
-    supabase.auth.signInWithOAuth({
-      provider: 'twitter',
-      options: {
-        // Use window.location.origin to get the correct URL dynamically
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
+    // We only want this code to run in the browser
+    if (typeof window !== 'undefined') {
+      supabase.auth.signInWithOAuth({
+        provider: 'twitter',
+        options: {
+          // Use window.location.origin to get the correct URL dynamically
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+    }
   }, [supabase.auth]);
 
   return (

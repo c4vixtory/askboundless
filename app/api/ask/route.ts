@@ -1,42 +1,54 @@
-import { createClient } from '@/lib/supabase-server';
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
+import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { Database } from '@/types/supabase';
 
-export async function POST(req: Request) {
-  // Create a Supabase server client
-  const supabase = createClient();
-  
-  // Get the authenticated user
-  const { data: { user } } = await supabase.auth.getUser();
+export async function POST(request: Request) {
+  const { title, details } = await request.json();
+  const supabase = createRouteHandlerClient<Database>({ cookies });
 
-  // Check if a user is logged in
-  if (!user) {
-    return new NextResponse(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  const { data: { session } } = await supabase.auth.getSession();
+
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Parse the request body for the title and details
-  const body = await req.json();
-  const { title, details } = body;
+  const userId = session.user.id;
 
-  // Insert the new question into the 'questions' table
-  const { error } = await supabase.from('questions').insert({
-    title,
-    details,
-    user_id: user.id,
-  });
+  // --- NEW: Implement daily question limit ---
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-  if (error) {
-    console.error('Error inserting question:', error);
-    return new NextResponse(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  const { count, error: countError } = await supabase
+    .from('questions')
+    .select('id', { count: 'exact' })
+    .eq('user_id', userId)
+    .gte('created_at', twentyFourHoursAgo); // Check questions created in the last 24 hours
+
+  if (countError) {
+    console.error('Error counting user questions:', countError);
+    return NextResponse.json({ error: 'Failed to check question limit.' }, { status: 500 });
   }
 
-  return new NextResponse(
-    JSON.stringify({ message: 'Question submitted successfully' }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } }
-  );
+  if (count && count >= 3) { // Allow 3 questions, so if count is 3 or more, reject
+    return NextResponse.json({ error: 'You can only ask 3 questions per day. Please try again tomorrow.' }, { status: 429 }); // 429 Too Many Requests
+  }
+  // --- END NEW: Implement daily question limit ---
+
+  try {
+    const { data, error } = await supabase
+      .from('questions')
+      .insert({ title, details, user_id: userId })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error inserting question:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ message: 'Question submitted successfully!', question: data }, { status: 201 });
+  } catch (err) {
+    console.error('Unexpected error in ask API:', err);
+    return NextResponse.json({ error: 'An unexpected error occurred.' }, { status: 500 });
+  }
 }

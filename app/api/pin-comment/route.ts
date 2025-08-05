@@ -2,7 +2,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { Database } from '@/types/supabase';
-import { revalidatePath } from 'next/cache'; // Import revalidatePath
+import { revalidateTag } from 'next/cache'; // Import revalidateTag
 
 export async function POST(request: Request) {
   const { commentId, questionId, isCurrentlyPinned } = await request.json();
@@ -37,9 +37,9 @@ export async function POST(request: Request) {
   try {
     const { data, error } = await supabase
       .from('comments')
-      .update({ is_pinned: !isCurrentlyPinned }) // Toggle the pinned status
+      .update({ is_pinned: !isCurrentlyPinned })
       .eq('id', commentId)
-      .select('is_pinned') // Select the updated status
+      .select('is_pinned')
       .single();
 
     if (error) {
@@ -47,8 +47,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // Revalidate the specific question page to show the updated comments order
-    revalidatePath(`/ask/${questionId}`);
+    // --- NEW: Revalidate the 'comments' tag ---
+    revalidateTag('comments'); // Invalidate cache for all fetches tagged 'comments'
 
     return NextResponse.json({ message: 'Comment pinned status updated successfully!', isPinned: data.is_pinned }, { status: 200 });
   } catch (err) {

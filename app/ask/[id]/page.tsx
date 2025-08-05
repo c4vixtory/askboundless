@@ -3,7 +3,7 @@ import { cookies } from 'next/headers';
 import { Database } from '@/types/supabase';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import CommentForm from '@/components/CommentForm'; // Import the CommentForm component
+import CommentForm from '@/components/CommentForm';
 
 // Define base types from the database
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -94,7 +94,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   // --- MANUALLY JOIN COMMENTS WITH PROFILES ---
   const comments: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
     ...comment,
-    authorProfile: profilesMap.get(comment.user_id) || null,
+    authorProfile: profilesMap.get(comment.user_id) || null, // Attach profile or null
   }));
 
   return (
@@ -111,7 +111,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
       <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">{question.title}</h1>
         <p className="text-gray-700 mb-4">{question.details}</p>
-        <div className="flex items-center text-sm text-gray-500">
+        <Link href={question.authorProfile?.username ? `https://x.com/${question.authorProfile.username}` : '#'} target="_blank" rel="noopener noreferrer" className="flex items-center text-sm text-gray-500 hover:underline hover:text-blue-500">
           {question.authorProfile?.avatar_url && (
             <img
               src={question.authorProfile.avatar_url}
@@ -120,7 +120,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
             />
           )}
           Asked by {question.authorProfile?.username || 'Anonymous'} on {new Date(question.created_at).toLocaleDateString()}
-        </div>
+        </Link>
       </div>
 
       {/* Comments Section */}
@@ -139,7 +139,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
                     : 'bg-gray-50 border-gray-200'
                 }`}
               >
-                <div className="flex items-center mb-2">
+                <Link href={comment.authorProfile?.username ? `https://x.com/${comment.authorProfile.username}` : '#'} target="_blank" rel="noopener noreferrer" className="flex items-center mb-2 hover:underline hover:text-blue-500">
                   {comment.authorProfile?.avatar_url && (
                     <img
                       src={comment.authorProfile.avatar_url}
@@ -158,7 +158,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
                   <span className="text-xs text-gray-500 ml-auto">
                     {new Date(comment.created_at).toLocaleString()}
                   </span>
-                </div>
+                </Link>
                 <p className="text-gray-700">{comment.content}</p>
               </li>
             ))}
@@ -172,7 +172,6 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
         {/* Comment Form */}
         <div className="p-6 bg-white rounded-lg shadow-md border border-gray-200">
           <h3 className="text-lg font-semibold mb-4">Add a Comment</h3>
-          {/* Render the CommentForm component here */}
           <CommentForm questionId={question.id} userId={session.user.id} />
         </div>
       </div>

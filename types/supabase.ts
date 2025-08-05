@@ -9,6 +9,46 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      comments: {
+        Row: {
+          content: string;
+          created_at: string;
+          id: string; // Changed to string for UUID
+          is_admin_comment: boolean;
+          question_id: number;
+          user_id: string;
+        };
+        Insert: {
+          content: string;
+          created_at?: string;
+          id?: string; // Changed to string for UUID
+          is_admin_comment?: boolean;
+          question_id: number;
+          user_id?: string;
+        };
+        Update: {
+          content?: string;
+          created_at?: string;
+          id?: string; // Changed to string for UUID
+          is_admin_comment?: boolean;
+          question_id?: number;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "comments_question_id_fkey";
+            columns: ["question_id"];
+            referencedRelation: "questions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "comments_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       questions: {
         Row: {
           created_at: string;
@@ -16,7 +56,7 @@ export interface Database {
           id: number;
           title: string | null;
           upvotes: number;
-          user_id: string; // Assuming user_id is always present now
+          user_id: string;
         };
         Insert: {
           created_at?: string;
@@ -40,7 +80,7 @@ export interface Database {
         Row: {
           id: string;
           username: string | null;
-          avatar_url: string | null; // Added avatar_url to profiles table
+          avatar_url: string | null;
         };
         Insert: {
           id?: string;

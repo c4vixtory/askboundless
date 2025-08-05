@@ -3,7 +3,8 @@ import { cookies } from 'next/headers';
 import { Database } from '@/types/supabase';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import SignOutButton from '@/components/SignOutButton'; // Assuming you have this component
+import SignOutButton from '@/components/SignOutButton';
+import UpvoteButton from '@/components/UpvoteButton'; // Import the new component
 
 // Define the type for a question from your database
 interface Question {
@@ -12,24 +13,22 @@ interface Question {
   details: string;
   created_at: string;
   user_id: string;
+  upvotes: number; // Add the new upvotes field
 }
 
 export default async function HomePage() {
-  // Create a Supabase client on the server side
   const supabase = createServerComponentClient<Database>({ cookies });
 
-  // Fetch the user to determine if they are logged in
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
 
   if (!session) {
     redirect('/login');
   }
 
-  // Get the Twitter username from the user_metadata object.
-  // We've removed the redundant database query that was causing the error.
   const twitterUsername = session.user.user_metadata?.user_name || session.user.email;
 
-  // Fetch all questions from the 'questions' table, ordering them by creation date
   const { data: questions, error } = await supabase
     .from('questions')
     .select('*')
@@ -61,12 +60,16 @@ export default async function HomePage() {
         {questions && questions.length > 0 ? (
           <ul className="space-y-4">
             {questions.map((question: Question) => (
-              <li key={question.id} className="p-4 border border-gray-200 rounded-lg shadow-sm bg-white hover:shadow-md transition-shadow duration-200">
-                <h3 className="text-lg font-medium text-gray-900">{question.title}</h3>
-                <p className="text-sm text-gray-600 mt-1">{question.details}</p>
-                <div className="text-xs text-gray-400 mt-2">
-                  Asked on {new Date(question.created_at).toLocaleDateString()}
+              <li key={question.id} className="p-4 border border-gray-200 rounded-lg shadow-sm bg-white hover:shadow-md transition-shadow duration-200 flex justify-between items-center">
+                <div>
+                  <h3 className="text-lg font-medium text-gray-900">{question.title}</h3>
+                  <p className="text-sm text-gray-600 mt-1">{question.details}</p>
+                  <div className="text-xs text-gray-400 mt-2">
+                    Asked on {new Date(question.created_at).toLocaleDateString()}
+                  </div>
                 </div>
+                {/* Add the UpvoteButton component here */}
+                <UpvoteButton initialUpvotes={question.upvotes} questionId={question.id} />
               </li>
             ))}
           </ul>
@@ -79,4 +82,3 @@ export default async function HomePage() {
     </div>
   );
 }
-

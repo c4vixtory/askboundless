@@ -24,19 +24,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Failed to remove upvote record.' }, { status: 500 });
       }
 
-      // 2. Decrement the upvotes count in the questions table
-      const { data: updatedQuestion, error: updateError } = await supabase
-        .from('questions')
-        .update({ upvotes: (await supabase.rpc('decrement_upvotes', { question_id_param: questionId })).data }) // Using RPC for atomic decrement
-        .eq('id', questionId)
-        .select('upvotes')
-        .single();
+      // 2. Call the RPC to decrement upvotes and get the new count
+      const { data: decrementedCount, error: rpcError } = await supabase.rpc('decrement_upvotes', { question_id_param: questionId });
 
-      if (updateError || !updatedQuestion) {
-        console.error('API Error: Failed to decrement question upvotes:', updateError);
-        return NextResponse.json({ error: 'Failed to decrement question upvotes.' }, { status: 500 });
+      if (rpcError || decrementedCount === null) {
+        console.error('API Error: Failed to call decrement_upvotes RPC:', rpcError);
+        return NextResponse.json({ error: 'Failed to decrement question upvotes via RPC.' }, { status: 500 });
       }
-      newUpvoteCount = updatedQuestion.upvotes;
+      newUpvoteCount = decrementedCount;
 
     } else {
       // User has NOT upvoted, so they want to UPVOTE
@@ -53,19 +48,14 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Failed to record upvote.' }, { status: 500 });
       }
 
-      // 2. Increment the upvotes count in the questions table
-      const { data: updatedQuestion, error: updateError } = await supabase
-        .from('questions')
-        .update({ upvotes: (await supabase.rpc('increment_upvotes', { question_id_param: questionId })).data }) // Using RPC for atomic increment
-        .eq('id', questionId)
-        .select('upvotes')
-        .single();
+      // 2. Call the RPC to increment upvotes and get the new count
+      const { data: incrementedCount, error: rpcError } = await supabase.rpc('increment_upvotes', { question_id_param: questionId });
 
-      if (updateError || !updatedQuestion) {
-        console.error('API Error: Failed to increment question upvotes:', updateError);
-        return NextResponse.json({ error: 'Failed to increment question upvotes.' }, { status: 500 });
+      if (rpcError || incrementedCount === null) {
+        console.error('API Error: Failed to call increment_upvotes RPC:', rpcError);
+        return NextResponse.json({ error: 'Failed to increment question upvotes via RPC.' }, { status: 500 });
       }
-      newUpvoteCount = updatedQuestion.upvotes;
+      newUpvoteCount = incrementedCount;
     }
 
     return NextResponse.json({ newUpvoteCount }, { status: 200 });

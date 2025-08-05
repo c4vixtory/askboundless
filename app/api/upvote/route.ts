@@ -2,6 +2,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { Database } from '@/types/supabase';
+import { revalidatePath } from 'next/cache'; // Import revalidatePath
 
 export async function POST(request: Request) {
   const { questionId, userId, isCurrentlyUpvoted } = await request.json();
@@ -57,6 +58,10 @@ export async function POST(request: Request) {
       }
       newUpvoteCount = incrementedCount;
     }
+
+    // --- NEW: Revalidate the paths that display questions to ensure fresh data ---
+    revalidatePath('/'); // Revalidate the homepage
+    revalidatePath(`/ask/${questionId}`); // Revalidate the specific question detail page
 
     return NextResponse.json({ newUpvoteCount }, { status: 200 });
 

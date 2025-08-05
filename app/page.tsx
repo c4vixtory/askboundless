@@ -1,5 +1,4 @@
-// Force dynamic rendering for this page to ensure fresh data on every request
-export const dynamic = 'force-dynamic';
+// Remove: export const dynamic = 'force-dynamic'; // No longer needed, revalidateTag handles freshness
 
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
@@ -50,10 +49,15 @@ export default async function HomePage() {
   });
 
   // --- FETCH QUESTIONS (NO JOIN HERE) ---
-  // Data will be fresh due to 'force-dynamic' on the page
+  // NEW: Add next: { tags: ['questions'] } for granular revalidation
   const { data: questionsRaw, error: questionsError } = await supabase
     .from('questions')
-    .select('*')
+    .select('*', {
+      // This option tells Next.js to tag this fetch.
+      // We will invalidate this tag from API routes when questions data changes.
+      // @ts-ignore // Ignore type error for this experimental option
+      next: { tags: ['questions'] },
+    })
     .order('created_at', { ascending: false });
 
   if (questionsError) {

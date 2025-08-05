@@ -11,8 +11,8 @@ export default function LoginPage() {
     supabase.auth.signInWithOAuth({
       provider: 'twitter',
       options: {
-        // Hardcode the redirect URL to ensure it's correct
-        redirectTo: 'http://localhost:3000/auth/callback',
+        // Use window.location.origin to get the correct URL dynamically
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     });
   }, [supabase.auth]);

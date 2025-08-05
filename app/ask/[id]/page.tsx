@@ -1,7 +1,6 @@
-'use client'; // <-- THIS MUST BE THE VERY FIRST LINE
+// Remove: export const dynamic = 'force-dynamic'; // No longer needed, revalidateTag handles freshness
 
-// Force dynamic rendering for this page to ensure fresh data on every request
-export const dynamic = 'force-dynamic';
+'use client';
 
 import { useState, useEffect } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
@@ -81,9 +80,13 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       setUserRole(currentUserProfile?.role || 'user');
 
       // --- FETCH THE SPECIFIC QUESTION ---
+      // NEW: Add next: { tags: ['questions'] } for granular revalidation
       const { data: questionRaw, error: questionError } = await supabase
         .from('questions')
-        .select('*')
+        .select('*', {
+          // @ts-ignore
+          next: { tags: ['questions'] },
+        })
         .eq('id', questionId)
         .single();
 
@@ -99,9 +102,13 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       });
 
       // --- FETCH COMMENTS FOR THIS QUESTION ---
+      // NEW: Add next: { tags: ['comments'] } for granular revalidation
       const { data: commentsRaw, error: commentsError } = await supabase
         .from('comments')
-        .select('*')
+        .select('*', {
+          // @ts-ignore
+          next: { tags: ['comments'] },
+        })
         .eq('question_id', questionId)
         .order('is_pinned', { ascending: false })
         .order('created_at', { ascending: true });
@@ -142,7 +149,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       });
 
       if (response.ok) {
-        router.refresh();
+        router.refresh(); // This will trigger fetchData in useEffect
       } else {
         const errorData = await response.json();
         alert(`Failed to update pin status: ${errorData.error}`);

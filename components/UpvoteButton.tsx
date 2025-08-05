@@ -13,8 +13,7 @@ interface UpvoteButtonProps {
 export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButtonProps) {
   const [upvotes, setUpvotes] = useState(initialUpvotes);
   const [hasUpvoted, setHasUpvoted] = useState(false);
-  const [loading, setLoading] = useState(true); // New loading state
-  const router = useRouter();
+  const [loading, setLoading] = useState(true);
   const supabase = createClientComponentClient<Database>();
 
   useEffect(() => {
@@ -39,33 +38,35 @@ export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButto
     }
 
     checkUpvoteStatus();
-  }, [questionId, supabase]); // Re-run when questionId changes or supabase client changes
+  }, [questionId, supabase]);
 
   const handleUpvote = async () => {
-    if (loading) return; // Prevent multiple clicks while loading status
-    setLoading(true); // Set loading state for the click action
+    if (loading) return;
+    setLoading(true);
 
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-      alert('You must be logged in to upvote.'); // Using alert for simplicity, consider a modal
+      alert('You must be logged in to upvote.');
       setLoading(false);
       return;
     }
 
     try {
+      // Send the current 'hasUpvoted' state to the API route.
+      // The API route will then perform the opposite action.
       const response = await fetch('/api/upvote', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ questionId, userId: user.id, hasUpvoted }),
+        body: JSON.stringify({ questionId, userId: user.id, isCurrentlyUpvoted: hasUpvoted }), // Renamed hasUpvoted to isCurrentlyUpvoted for clarity
       });
 
       if (response.ok) {
         const data = await response.json();
         setUpvotes(data.newUpvoteCount);
-        setHasUpvoted(!hasUpvoted); // Toggle the upvote status
+        setHasUpvoted(!hasUpvoted); // Toggle the state after successful API call
         router.refresh(); // Refresh the page to ensure data consistency
       } else {
         const errorData = await response.json();
@@ -87,7 +88,7 @@ export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButto
         ${hasUpvoted ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}
         ${loading ? 'opacity-50 cursor-not-allowed' : ''}
       `}
-      disabled={loading} // Disable button while loading or processing
+      disabled={loading}
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -95,9 +96,10 @@ export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButto
         viewBox="0 0 20 20"
         fill="currentColor"
       >
+        {/* Corrected SVG path for an UP arrow */}
         <path
           fillRule="evenodd"
-          d="M14.707 10.293a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 12.586V5a1 1 0 012 0v7.586l2.293-2.293a1 1 0 011.414 0z"
+          d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 8.293a1 1 0 01-1.414 0z"
           clipRule="evenodd"
         />
       </svg>

@@ -88,16 +88,19 @@ export interface Database {
           id: string;
           username: string | null;
           avatar_url: string | null;
+          is_admin: boolean; // <-- NEW: is_admin column
         };
         Insert: {
           id?: string;
           username?: string | null;
           avatar_url?: string | null;
+          is_admin?: boolean; // <-- NEW: is_admin column
         };
         Update: {
           id?: string;
           username?: string | null;
           avatar_url?: string | null;
+          is_admin?: boolean; // <-- NEW: is_admin column
         };
         Relationships: [
           {
@@ -142,7 +145,6 @@ export interface Database {
     };
     Views: {};
     Functions: {
-      // Added definitions for the new RPC functions
       decrement_upvotes: {
         Args: { question_id_param: number };
         Returns: number;

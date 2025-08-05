@@ -2,6 +2,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { Database } from '@/types/supabase';
+import { revalidateTag } from 'next/cache'; // Import revalidateTag
 
 export async function POST(request: Request) {
   const { question_id, user_id, content } = await request.json();
@@ -13,7 +14,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Unauthorized: User ID mismatch or not logged in.' }, { status: 401 });
   }
 
-  // --- Determine if the comment should be marked as an admin comment ---
   let shouldBeAdminComment = false;
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
@@ -25,11 +25,10 @@ export async function POST(request: Request) {
     console.error('Error fetching profile for comment admin check:', profileError);
   } else {
     const userRole = profile?.role || 'user';
-    if (userRole === 'admin' || userRole === 'me' || userRole === 'og') { // <-- NEW: Check for 'og' role
+    if (userRole === 'admin' || userRole === 'me' || userRole === 'og') {
       shouldBeAdminComment = true;
     }
   }
-  // --- END NEW ---
 
   try {
     const { data, error } = await supabase
@@ -47,6 +46,9 @@ export async function POST(request: Request) {
       console.error('Error inserting comment:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    // --- NEW: Revalidate the 'comments' tag ---
+    revalidateTag('comments'); // Invalidate cache for all fetches tagged 'comments'
 
     return NextResponse.json({ message: 'Comment submitted successfully!', comment: data }, { status: 201 });
   } catch (err) {

@@ -4,18 +4,18 @@ import { Database } from '@/types/supabase';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
-// Define types for Question and Profile
-type Profile = Database['public']['Tables']['profiles']['Row'];
+// Define types for Question, Comment, and Profile rows from the database
+type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 type QuestionRow = Database['public']['Tables']['questions']['Row'];
 type CommentRow = Database['public']['Tables']['comments']['Row'];
 
-// Combined types for data with joined profiles
+// Combined types for data with manually joined profiles
 type QuestionWithProfile = QuestionRow & {
-  profiles: Partial<Profile> | null; // Profile for the question author
+  profiles: Partial<ProfileRow> | null; // Profile for the question author
 };
 
 type CommentWithProfile = CommentRow & {
-  profile: Partial<Profile> | null; // Profile for the comment author
+  authorProfile: Partial<ProfileRow> | null; // Profile for the comment author
 };
 
 interface QuestionPageProps {
@@ -41,8 +41,8 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
     redirect('/login'); // Redirect if not logged in
   }
 
-  // Fetch the specific question and its author's profile
-  // We'll keep the join here as the error seems to be specific to comments-profiles relation.
+  // --- FETCH QUESTION AND ITS AUTHOR ---
+  // We'll keep the join here as this specific error seems to be for comments-profiles.
   const { data: questionData, error: questionError } = await supabase
     .from('questions')
     .select('*, profiles(id, username, avatar_url)')
@@ -54,10 +54,10 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
     return <p className="text-red-500 text-center py-10">Failed to load question.</p>;
   }
 
-  // Fetch comments for this question *without* joining profiles initially
+  // --- FETCH COMMENTS (WITHOUT JOIN) ---
   const { data: commentsRaw, error: commentsError } = await supabase
     .from('comments')
-    .select('*') // Select all columns from the comments table
+    .select('*') // Select all columns from the comments table, NO JOIN HERE
     .eq('question_id', questionId)
     .order('is_admin_comment', { ascending: false }) // Admins first
     .order('created_at', { ascending: true }); // Then by time
@@ -67,28 +67,29 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
     return <p className="text-red-500 text-center py-10">Failed to load comments.</p>;
   }
 
-  // Fetch all profiles separately to manually join with comments
+  // --- FETCH ALL PROFILES SEPARATELY ---
   const { data: profilesData, error: profilesError } = await supabase
     .from('profiles')
     .select('id, username, avatar_url'); // Only fetch necessary profile fields
 
   if (profilesError) {
     console.error('Error fetching profiles:', profilesError);
-    // Decide how to handle this: for now, proceed, comments will show 'Anonymous'
+    // Log the error but proceed, comments will show 'Anonymous' if profiles fail
   }
 
+  // --- MANUALLY JOIN COMMENTS WITH PROFILES ---
   // Create a map for quick profile lookup by ID
-  const profilesMap = new Map<string, Partial<Profile>>();
+  const profilesMap = new Map<string, Partial<ProfileRow>>();
   profilesData?.forEach(profile => {
     if (profile.id) {
       profilesMap.set(profile.id, profile);
     }
   });
 
-  // Manually join comments with their respective profiles
+  // Map raw comments to comments with author profiles
   const comments: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
     ...comment,
-    profile: profilesMap.get(comment.user_id) || null,
+    authorProfile: profilesMap.get(comment.user_id) || null, // Attach profile or null
   }));
 
   const question: QuestionWithProfile = questionData; // Type assertion
@@ -136,15 +137,15 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
                 }`}
               >
                 <div className="flex items-center mb-2">
-                  {comment.profile?.avatar_url && (
+                  {comment.authorProfile?.avatar_url && (
                     <img
-                      src={comment.profile.avatar_url}
+                      src={comment.authorProfile.avatar_url}
                       alt="Commenter Avatar"
                       className="w-5 h-5 rounded-full mr-2"
                     />
                   )}
                   <span className="font-medium text-gray-800">
-                    {comment.profile?.username || 'Anonymous'}
+                    {comment.authorProfile?.username || 'Anonymous'}
                   </span>
                   {comment.is_admin_comment && (
                     <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">

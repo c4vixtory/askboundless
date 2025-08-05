@@ -45,17 +45,16 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   // --- FETCH ALL PROFILES SEPARATELY FIRST ---
   const { data: fetchedProfiles, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, username, avatar_url, role');
+    .select('id, username, avatar_url, role'); // Fetching 'role'
 
   if (profilesError) {
     console.error('Error fetching profiles:', profilesError);
-    // If there's an error, treat profilesData as an empty array to prevent further errors
   }
-  const profilesData = fetchedProfiles || []; // Ensure it's an array, even if fetch fails
+  const profilesData = fetchedProfiles || [];
 
   // Create a map for quick profile lookup by ID
   const profilesMap = new Map<string, Partial<ProfileRow>>();
-  profilesData.forEach(profile => { // No '?' needed here because profilesData is guaranteed array
+  profilesData.forEach(profile => {
     if (profile.id) {
       profilesMap.set(profile.id, profile);
     }
@@ -96,7 +95,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   // --- MANUALLY JOIN COMMENTS WITH PROFILES ---
   const comments: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
     ...comment,
-    authorProfile: profilesMap.get(comment.user_id) || null, // Attach profile or null
+    authorProfile: profilesMap.get(comment.user_id) || null,
   }));
 
   return (
@@ -131,6 +130,11 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
             {question.authorProfile?.role === 'me' && (
               <span className="ml-2 px-2 py-0.5 bg-purple-600 text-white text-xs font-semibold rounded-full">
                 ME
+              </span>
+            )}
+            {question.authorProfile?.role === 'og' && ( // <-- NEW: Check for 'og' role
+              <span className="ml-2 px-2 py-0.5 bg-green-600 text-white text-xs font-semibold rounded-full">
+                OG
               </span>
             )}
           </span>
@@ -174,6 +178,11 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
                         ME
                       </span>
                     )}
+                    {comment.authorProfile?.role === 'og' && ( // <-- NEW: Check for 'og' role
+                      <span className="ml-2 px-2 py-0.5 bg-green-600 text-white text-xs font-semibold rounded-full">
+                        OG
+                      </span>
+                    )}
                   </span>
                   <span className="text-xs text-gray-500 ml-auto">
                     {new Date(comment.created_at).toLocaleString()}
@@ -198,4 +207,3 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
     </div>
   );
 }
-

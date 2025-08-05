@@ -88,19 +88,19 @@ export interface Database {
           id: string;
           username: string | null;
           avatar_url: string | null;
-          role: string; // <-- CHANGED: from is_admin: boolean to role: string
+          role: string; // <-- CONFIRM THIS IS 'role' AND NOT 'is_admin'
         };
         Insert: {
           id?: string;
           username?: string | null;
           avatar_url?: string | null;
-          role?: string; // <-- CHANGED
+          role?: string; // <-- CONFIRM THIS IS 'role'
         };
         Update: {
           id?: string;
           username?: string | null;
           avatar_url?: string | null;
-          role?: string; // <-- CHANGED
+          role?: string; // <-- CONFIRM THIS IS 'role'
         };
         Relationships: [
           {

@@ -29,13 +29,13 @@ export default async function HomePage() {
   const twitterUsername = session.user.user_metadata?.user_name || session.user.email;
 
   // --- FETCH ALL PROFILES SEPARATELY FIRST ---
+  // Now fetching 'is_admin' as well
   const { data: profilesData, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, username, avatar_url');
+    .select('id, username, avatar_url, is_admin'); // <-- Added is_admin here
 
   if (profilesError) {
     console.error('Error fetching profiles:', profilesError);
-    // Log the error but proceed, authors will show 'Anonymous' if profiles fail
   }
 
   // Create a map for quick profile lookup by ID
@@ -49,7 +49,7 @@ export default async function HomePage() {
   // --- FETCH QUESTIONS (NO JOIN HERE) ---
   const { data: questionsRaw, error: questionsError } = await supabase
     .from('questions')
-    .select('*') // Select all columns from questions table, NO JOIN HERE
+    .select('*')
     .order('created_at', { ascending: false });
 
   if (questionsError) {
@@ -83,8 +83,9 @@ export default async function HomePage() {
         <h2 className="text-xl font-semibold">Latest Questions</h2>
         {questions && questions.length > 0 ? (
           <ul className="space-y-4">
-            {questions.map((question: QuestionWithProfile) => { // Use QuestionWithProfile here
-              const authorProfile = question.authorProfile; // Access the manually joined profile
+            {questions.map((question: QuestionWithProfile) => {
+              const authorProfile = question.authorProfile;
+              const twitterProfileUrl = authorProfile?.username ? `https://x.com/${authorProfile.username}` : '#';
               return (
                 <li key={question.id} className="p-4 border border-gray-200 rounded-lg shadow-sm bg-white hover:shadow-md transition-shadow duration-200 flex justify-between items-center">
                   <div className="flex-grow">
@@ -94,7 +95,7 @@ export default async function HomePage() {
                       </Link>
                     </h3>
                     <p className="text-sm text-gray-600 mt-1">{question.details}</p>
-                    <Link href={authorProfile?.username ? `https://x.com/${authorProfile.username}` : '#'} target="_blank" rel="noopener noreferrer" className="flex items-center text-xs text-gray-400 mt-2 hover:underline hover:text-blue-500">
+                    <Link href={twitterProfileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center text-xs text-gray-400 mt-2 hover:underline hover:text-blue-500">
                       {authorProfile?.avatar_url && (
                         <img
                           src={authorProfile.avatar_url}
@@ -102,7 +103,15 @@ export default async function HomePage() {
                           className="w-5 h-5 rounded-full mr-2"
                         />
                       )}
-                      Asked by {authorProfile?.username || 'Anonymous'} on {new Date(question.created_at).toLocaleString()} {/* Changed to toLocaleString() */}
+                      <span className="flex items-center">
+                        Asked by {authorProfile?.username || 'Anonymous'}
+                        {authorProfile?.is_admin && ( // <-- NEW: Admin badge for questions
+                          <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
+                            Admin
+                          </span>
+                        )}
+                      </span>
+                      <span className="ml-1">on {new Date(question.created_at).toLocaleString()}</span>
                     </Link>
                   </div>
                   <UpvoteButton initialUpvotes={question.upvotes} questionId={question.id} />

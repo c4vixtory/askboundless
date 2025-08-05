@@ -1,3 +1,4 @@
+
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { Database } from '@/types/supabase';
@@ -5,12 +6,16 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 // Define types for Question and Comment, including joined profiles
+// Use Partial<Profile> to allow for cases where not all fields are returned,
+// and ensure it can be null.
+type Profile = Database['public']['Tables']['profiles']['Row'];
+
 type Question = Database['public']['Tables']['questions']['Row'] & {
-  profiles: Database['public']['Tables']['profiles']['Row'] | null;
+  profiles: Partial<Profile> | null; // Changed to Partial<Profile> | null
 };
 
 type Comment = Database['public']['Tables']['comments']['Row'] & {
-  profiles: Database['public']['Tables']['profiles']['Row'] | null;
+  profiles: Partial<Profile> | null; // Changed to Partial<Profile> | null
 };
 
 interface QuestionPageProps {
@@ -39,7 +44,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   // Fetch the specific question and its author's profile
   const { data: questionData, error: questionError } = await supabase
     .from('questions')
-    .select('*, profiles(username, avatar_url)')
+    .select('*, profiles(id, username, avatar_url)')
     .eq('id', questionId)
     .single(); // Use single() because we expect only one question
 
@@ -52,7 +57,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   // Order by is_admin_comment (true first) and then by created_at
   const { data: commentsData, error: commentsError } = await supabase
     .from('comments')
-    .select('*, profiles(username, avatar_url)')
+    .select('*, profiles(id, username, avatar_url)')
     .eq('question_id', questionId)
     .order('is_admin_comment', { ascending: false }) // Admins first
     .order('created_at', { ascending: true }); // Then by time
@@ -147,4 +152,3 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
     </div>
   );
 }
-

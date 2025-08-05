@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { Database } from '@/types/supabase';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
+import CommentForm from '@/components/CommentForm'; // Import the CommentForm component
 
 // Define base types from the database
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -42,14 +43,12 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   }
 
   // --- FETCH ALL PROFILES SEPARATELY FIRST ---
-  // This ensures we have all profile data before attempting any joins.
   const { data: profilesData, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, username, avatar_url'); // Only fetch necessary profile fields
+    .select('id, username, avatar_url');
 
   if (profilesError) {
     console.error('Error fetching profiles:', profilesError);
-    // Decide how to handle this: for now, proceed, authors will show 'Anonymous'
   }
 
   // Create a map for quick profile lookup by ID
@@ -63,7 +62,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   // --- FETCH THE SPECIFIC QUESTION (NO JOIN HERE) ---
   const { data: questionRaw, error: questionError } = await supabase
     .from('questions')
-    .select('*') // Select all columns from the questions table, NO JOIN HERE
+    .select('*')
     .eq('id', questionId)
     .single();
 
@@ -82,7 +81,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   // --- FETCH COMMENTS FOR THIS QUESTION (NO JOIN HERE) ---
   const { data: commentsRaw, error: commentsError } = await supabase
     .from('comments')
-    .select('*') // Select all columns from the comments table, NO JOIN HERE
+    .select('*')
     .eq('question_id', questionId)
     .order('is_admin_comment', { ascending: false }) // Admins first
     .order('created_at', { ascending: true }); // Then by time
@@ -95,7 +94,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   // --- MANUALLY JOIN COMMENTS WITH PROFILES ---
   const comments: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
     ...comment,
-    authorProfile: profilesMap.get(comment.user_id) || null, // Attach profile or null
+    authorProfile: profilesMap.get(comment.user_id) || null,
   }));
 
   return (
@@ -113,14 +112,14 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
         <h1 className="text-2xl font-bold text-gray-900 mb-2">{question.title}</h1>
         <p className="text-gray-700 mb-4">{question.details}</p>
         <div className="flex items-center text-sm text-gray-500">
-          {question.authorProfile?.avatar_url && ( // Changed from question.profiles
+          {question.authorProfile?.avatar_url && (
             <img
-              src={question.authorProfile.avatar_url} // Changed from question.profiles
+              src={question.authorProfile.avatar_url}
               alt="Author Avatar"
               className="w-6 h-6 rounded-full mr-2"
             />
           )}
-          Asked by {question.authorProfile?.username || 'Anonymous'} on {new Date(question.created_at).toLocaleDateString()} {/* Changed from question.profiles */}
+          Asked by {question.authorProfile?.username || 'Anonymous'} on {new Date(question.created_at).toLocaleDateString()}
         </div>
       </div>
 
@@ -141,9 +140,9 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
                 }`}
               >
                 <div className="flex items-center mb-2">
-                  {comment.authorProfile?.avatar_url && ( // Changed from comment.profiles
+                  {comment.authorProfile?.avatar_url && (
                     <img
-                      src={comment.authorProfile.avatar_url} // Changed from comment.profiles
+                      src={comment.authorProfile.avatar_url}
                       alt="Commenter Avatar"
                       className="w-5 h-5 rounded-full mr-2"
                     />
@@ -170,11 +169,11 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
           </div>
         )}
 
-        {/* Comment Form (will be added in the next step) */}
-        {/* For now, a placeholder */}
+        {/* Comment Form */}
         <div className="p-6 bg-white rounded-lg shadow-md border border-gray-200">
           <h3 className="text-lg font-semibold mb-4">Add a Comment</h3>
-          <p className="text-gray-600">Comment form will go here.</p>
+          {/* Render the CommentForm component here */}
+          <CommentForm questionId={question.id} userId={session.user.id} />
         </div>
       </div>
     </div>

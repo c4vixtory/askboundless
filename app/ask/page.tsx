@@ -32,6 +32,8 @@ export default function AskPage() {
       } else {
         // Redirect to the homepage after successful submission
         router.push('/');
+        // Force a refresh of the page to re-fetch questions
+        router.refresh();
       }
     } catch (err) {
       setError('An unexpected error occurred.');

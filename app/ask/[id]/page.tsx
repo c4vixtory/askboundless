@@ -1,10 +1,13 @@
-'use client'; // This component needs to be a client component for the pin button's state and interaction
+// Force dynamic rendering for this page to ensure fresh data on every request
+export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from 'react'; // Import useState and useEffect
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'; // Use client component client
+'use client';
+
+import { useState, useEffect } from 'react';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Database } from '@/types/supabase';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter } from 'next/navigation';
 import CommentForm from '@/components/CommentForm';
 
 // Define base types from the database
@@ -28,16 +31,16 @@ interface QuestionPageProps {
 }
 
 export default function QuestionPage({ params }: QuestionPageProps) {
-  const supabase = createClientComponentClient<Database>(); // Use client component client
-  const router = useRouter(); // Initialize useRouter
+  const supabase = createClientComponentClient<Database>();
+  const router = useRouter();
   const questionId = parseInt(params.id, 10);
 
   const [question, setQuestion] = useState<QuestionWithProfile | null>(null);
   const [comments, setComments] = useState<CommentWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [session, setSession] = useState<any>(null); // State to hold session
-  const [userRole, setUserRole] = useState<string>('user'); // State to hold user role
+  const [session, setSession] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string>('user');
 
   useEffect(() => {
     async function fetchData() {
@@ -48,7 +51,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       setSession(currentSession);
 
       if (!currentSession) {
-        router.push('/login'); // Redirect if not logged in
+        router.push('/login');
         return;
       }
 
@@ -78,6 +81,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       setUserRole(currentUserProfile?.role || 'user');
 
       // --- FETCH THE SPECIFIC QUESTION ---
+      // Data will be fresh due to 'force-dynamic' on the page
       const { data: questionRaw, error: questionError } = await supabase
         .from('questions')
         .select('*')
@@ -96,12 +100,13 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       });
 
       // --- FETCH COMMENTS FOR THIS QUESTION ---
+      // Data will be fresh due to 'force-dynamic' on the page
       const { data: commentsRaw, error: commentsError } = await supabase
         .from('comments')
         .select('*')
         .eq('question_id', questionId)
-        .order('is_pinned', { ascending: false }) // <-- NEW: Order by is_pinned first (true comes before false)
-        .order('created_at', { ascending: true }); // Then by time
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: true });
 
       if (commentsError) {
         console.error('Error fetching comments:', commentsError);
@@ -118,10 +123,10 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       setLoading(false);
     }
 
-    if (!isNaN(questionId)) { // Only fetch if questionId is valid
+    if (!isNaN(questionId)) {
       fetchData();
     }
-  }, [questionId, supabase, router]); // Re-run when questionId, supabase client, or router changes
+  }, [questionId, supabase, router]);
 
   const handlePinToggle = async (commentId: string, isCurrentlyPinned: boolean) => {
     if (userRole !== 'admin' && userRole !== 'me' && userRole !== 'og') {
@@ -139,8 +144,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       });
 
       if (response.ok) {
-        // Refresh data after successful pin/unpin
-        router.refresh(); // This will trigger fetchData in useEffect
+        router.refresh();
       } else {
         const errorData = await response.json();
         alert(`Failed to update pin status: ${errorData.error}`);
@@ -222,7 +226,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
               <li
                 key={comment.id}
                 className={`p-4 rounded-lg shadow-sm border ${
-                  comment.is_pinned // <-- NEW: Pinned comment styling
+                  comment.is_pinned
                     ? 'bg-yellow-50 border-yellow-300 ring-2 ring-yellow-400'
                     : comment.is_admin_comment
                       ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-300'
@@ -258,13 +262,13 @@ export default function QuestionPage({ params }: QuestionPageProps) {
                     </span>
                   </Link>
                   <span className="text-xs text-gray-500 ml-auto flex items-center">
-                    {comment.is_pinned && ( // <-- NEW: Pinned icon
+                    {comment.is_pinned && (
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-yellow-500 mr-1" viewBox="0 0 20 20" fill="currentColor">
                         <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z" clipRule="evenodd" />
                       </svg>
                     )}
                     {new Date(comment.created_at).toLocaleString()}
-                    {(userRole === 'admin' || userRole === 'me' || userRole === 'og') && ( // <-- NEW: Pin/Unpin button for authorized roles
+                    {(userRole === 'admin' || userRole === 'me' || userRole === 'og') && (
                       <button
                         onClick={() => handlePinToggle(comment.id, comment.is_pinned)}
                         className={`ml-2 px-2 py-0.5 text-xs font-semibold rounded-full transition-colors duration-200

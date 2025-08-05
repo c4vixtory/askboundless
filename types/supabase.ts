@@ -11,29 +11,53 @@ export interface Database {
     Tables: {
       questions: {
         Row: {
-          id: number
-          title: string
-          details: string
           created_at: string
+          details: string | null
+          id: number
+          title: string | null
+          upvotes: number
           user_id: string
         }
         Insert: {
-          id?: number
-          title: string
-          details: string
           created_at?: string
-          user_id: string
+          details?: string | null
+          id?: number
+          title?: string | null
+          upvotes?: number
+          user_id?: string
         }
         Update: {
-          id?: number
-          title?: string
-          details?: string
           created_at?: string
+          details?: string | null
+          id?: number
+          title?: string | null
+          upvotes?: number
           user_id?: string
         }
         Relationships: []
       }
-      // Add more tables here as needed
+      profiles: {
+        Row: {
+          id: string
+          username: string | null
+        }
+        Insert: {
+          id?: string
+          username?: string | null
+        }
+        Update: {
+          id?: string
+          username?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_id_fkey"
+            columns: ["id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {}
     Functions: {}

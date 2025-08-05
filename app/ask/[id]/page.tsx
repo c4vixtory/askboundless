@@ -1,8 +1,10 @@
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+'use client'; // This component needs to be a client component for the pin button's state and interaction
+
+import { useState, useEffect } from 'react'; // Import useState and useEffect
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'; // Use client component client
 import { Database } from '@/types/supabase';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation'; // Import useRouter
 import CommentForm from '@/components/CommentForm';
 
 // Define base types from the database
@@ -10,7 +12,7 @@ type ProfileRow = Database['public']['Tables']['profiles']['Row'];
 type QuestionRow = Database['public']['Tables']['questions']['Row'];
 type CommentRow = Database['public']['Tables']['comments']['Row'];
 
-// Combined types for data with manually joined profiles
+// Combined types for data with manually joined profiles and is_pinned status
 type QuestionWithProfile = QuestionRow & {
   authorProfile: Partial<ProfileRow> | null; // Profile for the question author
 };
@@ -25,78 +27,145 @@ interface QuestionPageProps {
   };
 }
 
-export default async function QuestionPage({ params }: QuestionPageProps) {
-  const supabase = createServerComponentClient<Database>({ cookies });
-  const questionId = parseInt(params.id, 10); // Parse the ID from the URL
+export default function QuestionPage({ params }: QuestionPageProps) {
+  const supabase = createClientComponentClient<Database>(); // Use client component client
+  const router = useRouter(); // Initialize useRouter
+  const questionId = parseInt(params.id, 10);
+
+  const [question, setQuestion] = useState<QuestionWithProfile | null>(null);
+  const [comments, setComments] = useState<CommentWithProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [session, setSession] = useState<any>(null); // State to hold session
+  const [userRole, setUserRole] = useState<string>('user'); // State to hold user role
+
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      setError(null);
+
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      setSession(currentSession);
+
+      if (!currentSession) {
+        router.push('/login'); // Redirect if not logged in
+        return;
+      }
+
+      const currentUserId = currentSession.user.id;
+
+      // --- FETCH ALL PROFILES SEPARATELY FIRST ---
+      const { data: fetchedProfiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, avatar_url, role');
+
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        setError('Failed to load user profiles.');
+        setLoading(false);
+        return;
+      }
+      const profilesData = fetchedProfiles || [];
+      const profilesMap = new Map<string, Partial<ProfileRow>>();
+      profilesData.forEach(profile => {
+        if (profile.id) {
+          profilesMap.set(profile.id, profile);
+        }
+      });
+
+      // Determine current user's role
+      const currentUserProfile = profilesMap.get(currentUserId);
+      setUserRole(currentUserProfile?.role || 'user');
+
+      // --- FETCH THE SPECIFIC QUESTION ---
+      const { data: questionRaw, error: questionError } = await supabase
+        .from('questions')
+        .select('*')
+        .eq('id', questionId)
+        .single();
+
+      if (questionError || !questionRaw) {
+        console.error('Error fetching question:', questionError);
+        setError('Failed to load question.');
+        setLoading(false);
+        return;
+      }
+      setQuestion({
+        ...questionRaw,
+        authorProfile: profilesMap.get(questionRaw.user_id) || null,
+      });
+
+      // --- FETCH COMMENTS FOR THIS QUESTION ---
+      const { data: commentsRaw, error: commentsError } = await supabase
+        .from('comments')
+        .select('*')
+        .eq('question_id', questionId)
+        .order('is_pinned', { ascending: false }) // <-- NEW: Order by is_pinned first (true comes before false)
+        .order('created_at', { ascending: true }); // Then by time
+
+      if (commentsError) {
+        console.error('Error fetching comments:', commentsError);
+        setError('Failed to load comments.');
+        setLoading(false);
+        return;
+      }
+
+      const commentsWithProfiles: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
+        ...comment,
+        authorProfile: profilesMap.get(comment.user_id) || null,
+      }));
+      setComments(commentsWithProfiles);
+      setLoading(false);
+    }
+
+    if (!isNaN(questionId)) { // Only fetch if questionId is valid
+      fetchData();
+    }
+  }, [questionId, supabase, router]); // Re-run when questionId, supabase client, or router changes
+
+  const handlePinToggle = async (commentId: string, isCurrentlyPinned: boolean) => {
+    if (userRole !== 'admin' && userRole !== 'me' && userRole !== 'og') {
+      alert('You do not have permission to pin comments.');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/pin-comment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ commentId, questionId, isCurrentlyPinned }),
+      });
+
+      if (response.ok) {
+        // Refresh data after successful pin/unpin
+        router.refresh(); // This will trigger fetchData in useEffect
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to update pin status: ${errorData.error}`);
+      }
+    } catch (err) {
+      console.error('Network error during pin toggle:', err);
+      alert('An unexpected error occurred. Please try again.');
+    }
+  };
 
   if (isNaN(questionId)) {
-    // Handle invalid ID gracefully
     return <p className="text-red-500 text-center py-10">Invalid question ID.</p>;
   }
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    redirect('/login'); // Redirect if not logged in
+  if (loading) {
+    return <p className="text-center py-10">Loading question and comments...</p>;
   }
 
-  // --- FETCH ALL PROFILES SEPARATELY FIRST ---
-  const { data: fetchedProfiles, error: profilesError } = await supabase
-    .from('profiles')
-    .select('id, username, avatar_url, role'); // Fetching 'role'
-
-  if (profilesError) {
-    console.error('Error fetching profiles:', profilesError);
-  }
-  const profilesData = fetchedProfiles || [];
-
-  // Create a map for quick profile lookup by ID
-  const profilesMap = new Map<string, Partial<ProfileRow>>();
-  profilesData.forEach(profile => {
-    if (profile.id) {
-      profilesMap.set(profile.id, profile);
-    }
-  });
-
-  // --- FETCH THE SPECIFIC QUESTION (NO JOIN HERE) ---
-  const { data: questionRaw, error: questionError } = await supabase
-    .from('questions')
-    .select('*')
-    .eq('id', questionId)
-    .single();
-
-  if (questionError || !questionRaw) {
-    console.error('Error fetching question:', questionError);
-    return <p className="text-red-500 text-center py-10">Failed to load question.</p>;
+  if (error) {
+    return <p className="text-red-500 text-center py-10">{error}</p>;
   }
 
-  // Manually attach the author's profile to the question
-  const question: QuestionWithProfile = {
-    ...questionRaw,
-    authorProfile: profilesMap.get(questionRaw.user_id) || null,
-  };
-
-
-  // --- FETCH COMMENTS FOR THIS QUESTION (NO JOIN HERE) ---
-  const { data: commentsRaw, error: commentsError } = await supabase
-    .from('comments')
-    .select('*')
-    .eq('question_id', questionId)
-    .order('is_admin_comment', { ascending: false }) // Admins first
-    .order('created_at', { ascending: true }); // Then by time
-
-  if (commentsError) {
-    console.error('Error fetching comments:', commentsError);
-    return <p className="text-red-500 text-center py-10">Failed to load comments.</p>;
+  if (!question) {
+    return <p className="text-center py-10">Question not found.</p>;
   }
-
-  // --- MANUALLY JOIN COMMENTS WITH PROFILES ---
-  const comments: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
-    ...comment,
-    authorProfile: profilesMap.get(comment.user_id) || null,
-  }));
 
   return (
     <div className="max-w-3xl mx-auto py-10 px-4 space-y-8">
@@ -132,7 +201,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
                 ME
               </span>
             )}
-            {question.authorProfile?.role === 'og' && ( // <-- NEW: Check for 'og' role
+            {question.authorProfile?.role === 'og' && (
               <span className="ml-2 px-2 py-0.5 bg-green-600 text-white text-xs font-semibold rounded-full">
                 OG
               </span>
@@ -153,41 +222,60 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
               <li
                 key={comment.id}
                 className={`p-4 rounded-lg shadow-sm border ${
-                  comment.is_admin_comment
-                    ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-300' // Highlight for admin comments
-                    : 'bg-gray-50 border-gray-200'
+                  comment.is_pinned // <-- NEW: Pinned comment styling
+                    ? 'bg-yellow-50 border-yellow-300 ring-2 ring-yellow-400'
+                    : comment.is_admin_comment
+                      ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-300'
+                      : 'bg-gray-50 border-gray-200'
                 }`}
               >
-                <Link href={comment.authorProfile?.username ? `https://x.com/${comment.authorProfile.username}` : '#'} target="_blank" rel="noopener noreferrer" className="flex items-center mb-2 hover:underline hover:text-blue-500">
-                  {comment.authorProfile?.avatar_url && (
-                    <img
-                      src={comment.authorProfile.avatar_url}
-                      alt="Commenter Avatar"
-                      className="w-5 h-5 rounded-full mr-2"
-                    />
-                  )}
-                  <span className="font-medium text-gray-800 flex items-center">
-                    {comment.authorProfile?.username || 'Anonymous'}
-                    {comment.authorProfile?.role === 'admin' && (
-                      <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
-                        Admin
-                      </span>
+                <div className="flex items-center mb-2">
+                  <Link href={comment.authorProfile?.username ? `https://x.com/${comment.authorProfile.username}` : '#'} target="_blank" rel="noopener noreferrer" className="flex items-center hover:underline hover:text-blue-500">
+                    {comment.authorProfile?.avatar_url && (
+                      <img
+                        src={comment.authorProfile.avatar_url}
+                        alt="Commenter Avatar"
+                        className="w-5 h-5 rounded-full mr-2"
+                      />
                     )}
-                    {comment.authorProfile?.role === 'me' && (
-                      <span className="ml-2 px-2 py-0.5 bg-purple-600 text-white text-xs font-semibold rounded-full">
-                        ME
-                      </span>
+                    <span className="font-medium text-gray-800 flex items-center">
+                      {comment.authorProfile?.username || 'Anonymous'}
+                      {comment.authorProfile?.role === 'admin' && (
+                        <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
+                          Admin
+                        </span>
+                      )}
+                      {comment.authorProfile?.role === 'me' && (
+                        <span className="ml-2 px-2 py-0.5 bg-purple-600 text-white text-xs font-semibold rounded-full">
+                          ME
+                        </span>
+                      )}
+                      {comment.authorProfile?.role === 'og' && (
+                        <span className="ml-2 px-2 py-0.5 bg-green-600 text-white text-xs font-semibold rounded-full">
+                          OG
+                        </span>
+                      )}
+                    </span>
+                  </Link>
+                  <span className="text-xs text-gray-500 ml-auto flex items-center">
+                    {comment.is_pinned && ( // <-- NEW: Pinned icon
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-yellow-500 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z" clipRule="evenodd" />
+                      </svg>
                     )}
-                    {comment.authorProfile?.role === 'og' && ( // <-- NEW: Check for 'og' role
-                      <span className="ml-2 px-2 py-0.5 bg-green-600 text-white text-xs font-semibold rounded-full">
-                        OG
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-xs text-gray-500 ml-auto">
                     {new Date(comment.created_at).toLocaleString()}
+                    {(userRole === 'admin' || userRole === 'me' || userRole === 'og') && ( // <-- NEW: Pin/Unpin button for authorized roles
+                      <button
+                        onClick={() => handlePinToggle(comment.id, comment.is_pinned)}
+                        className={`ml-2 px-2 py-0.5 text-xs font-semibold rounded-full transition-colors duration-200
+                          ${comment.is_pinned ? 'bg-yellow-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}
+                        `}
+                      >
+                        {comment.is_pinned ? 'Unpin' : 'Pin'}
+                      </button>
+                    )}
                   </span>
-                </Link>
+                </div>
                 <p className="text-gray-700">{comment.content}</p>
               </li>
             ))}
@@ -201,7 +289,8 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
         {/* Comment Form */}
         <div className="p-6 bg-white rounded-lg shadow-md border border-gray-200">
           <h3 className="text-lg font-semibold mb-4">Add a Comment</h3>
-          <CommentForm questionId={question.id} userId={session.user.id} />
+          {session && <CommentForm questionId={question.id} userId={session.user.id} />}
+          {!session && <p className="text-gray-500">Please log in to add a comment.</p>}
         </div>
       </div>
     </div>

@@ -15,22 +15,22 @@ export async function POST(request: Request) {
 
   const userId = session.user.id;
 
-  // --- NEW: Check if the user is an admin ---
+  // --- NEW: Check the user's role ---
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('is_admin')
+    .select('role') // <-- Select the 'role' column instead of 'is_admin'
     .eq('id', userId)
     .single();
 
   if (profileError) {
-    console.error('Error fetching user profile for admin check:', profileError);
+    console.error('Error fetching user profile for role check:', profileError);
     return NextResponse.json({ error: 'Failed to verify user status.' }, { status: 500 });
   }
 
-  const isAdmin = profile?.is_admin || false; // Default to false if profile not found or is_admin is null
+  const userRole = profile?.role || 'user'; // Default to 'user' if role not found or null
 
-  // --- Conditional: Implement daily question limit ONLY if user is NOT admin ---
-  if (!isAdmin) {
+  // --- Conditional: Implement daily question limit ONLY if user is NOT admin or ME ---
+  if (userRole !== 'admin' && userRole !== 'me') { // <-- Check for both 'admin' and 'me' roles
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     const { count, error: countError } = await supabase

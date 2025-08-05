@@ -29,18 +29,19 @@ export default async function HomePage() {
   const twitterUsername = session.user.user_metadata?.user_name || session.user.email;
 
   // --- FETCH ALL PROFILES SEPARATELY FIRST ---
-  // Now fetching 'is_admin' as well
-  const { data: profilesData, error: profilesError } = await supabase
+  const { data: fetchedProfiles, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, username, avatar_url, is_admin'); // <-- Added is_admin here
+    .select('id, username, avatar_url, role');
 
   if (profilesError) {
     console.error('Error fetching profiles:', profilesError);
+    // If there's an error, treat profilesData as an empty array to prevent further errors
   }
+  const profilesData = fetchedProfiles || []; // Ensure it's an array, even if fetch fails
 
   // Create a map for quick profile lookup by ID
   const profilesMap = new Map<string, Partial<ProfileRow>>();
-  profilesData?.forEach(profile => {
+  profilesData.forEach(profile => { // No '?' needed here because profilesData is guaranteed array
     if (profile.id) {
       profilesMap.set(profile.id, profile);
     }
@@ -105,9 +106,14 @@ export default async function HomePage() {
                       )}
                       <span className="flex items-center">
                         Asked by {authorProfile?.username || 'Anonymous'}
-                        {authorProfile?.is_admin && ( // <-- NEW: Admin badge for questions
+                        {authorProfile?.role === 'admin' && (
                           <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
                             Admin
+                          </span>
+                        )}
+                        {authorProfile?.role === 'me' && (
+                          <span className="ml-2 px-2 py-0.5 bg-purple-600 text-white text-xs font-semibold rounded-full">
+                            ME
                           </span>
                         )}
                       </span>

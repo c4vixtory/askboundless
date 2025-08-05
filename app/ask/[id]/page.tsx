@@ -43,10 +43,10 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   }
 
   // --- FETCH ALL PROFILES SEPARATELY FIRST ---
-  // Now fetching 'is_admin' as well
+  // CONFIRM: Fetching 'role' here
   const { data: profilesData, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, username, avatar_url, is_admin'); // <-- Added is_admin here
+    .select('id, username, avatar_url, role'); // <-- CONFIRM THIS IS 'role'
 
   if (profilesError) {
     console.error('Error fetching profiles:', profilesError);
@@ -55,6 +55,7 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   // Create a map for quick profile lookup by ID
   const profilesMap = new Map<string, Partial<ProfileRow>>();
   profilesData?.forEach(profile => {
+    // This 'profile.id' check is correct, assuming 'profile' is not the SelectQueryError itself
     if (profile.id) {
       profilesMap.set(profile.id, profile);
     }
@@ -122,9 +123,14 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
           )}
           <span className="flex items-center">
             Asked by {question.authorProfile?.username || 'Anonymous'}
-            {question.authorProfile?.is_admin && ( // <-- NEW: Admin badge for question author
+            {question.authorProfile?.role === 'admin' && (
               <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
                 Admin
+              </span>
+            )}
+            {question.authorProfile?.role === 'me' && (
+              <span className="ml-2 px-2 py-0.5 bg-purple-600 text-white text-xs font-semibold rounded-full">
+                ME
               </span>
             )}
           </span>
@@ -158,9 +164,14 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
                   )}
                   <span className="font-medium text-gray-800 flex items-center">
                     {comment.authorProfile?.username || 'Anonymous'}
-                    {comment.authorProfile?.is_admin && ( // <-- NEW: Admin badge for comment author
+                    {comment.authorProfile?.role === 'admin' && (
                       <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
                         Admin
+                      </span>
+                    )}
+                    {comment.authorProfile?.role === 'me' && (
+                      <span className="ml-2 px-2 py-0.5 bg-purple-600 text-white text-xs font-semibold rounded-full">
+                        ME
                       </span>
                     )}
                   </span>

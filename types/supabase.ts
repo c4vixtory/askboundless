@@ -141,7 +141,17 @@ export interface Database {
       };
     };
     Views: {};
-    Functions: {};
+    Functions: {
+      // Added definitions for the new RPC functions
+      decrement_upvotes: {
+        Args: { question_id_param: number };
+        Returns: number;
+      };
+      increment_upvotes: {
+        Args: { question_id_param: number };
+        Returns: number;
+      };
+    };
     Enums: {};
     CompositeTypes: {};
   };

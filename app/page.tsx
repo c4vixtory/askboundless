@@ -1,3 +1,6 @@
+// Force dynamic rendering for this page to ensure fresh data on every request
+export const dynamic = 'force-dynamic';
+
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { Database } from '@/types/supabase';
@@ -47,20 +50,10 @@ export default async function HomePage() {
   });
 
   // --- FETCH QUESTIONS (NO JOIN HERE) ---
-  // NEW: Add { cache: 'no-store' } to ensure fresh data
+  // Data will be fresh due to 'force-dynamic' on the page
   const { data: questionsRaw, error: questionsError } = await supabase
     .from('questions')
-    .select('*', {
-      // This option ensures the data is always fresh, bypassing Next.js cache
-      // and is crucial for real-time updates like upvotes.
-      // It will re-fetch data on every request to the server component.
-      // This is necessary because the default fetch caching might serve stale data
-      // even after revalidatePath.
-      external: true, // Mark this fetch as external to Next.js's default caching behavior
-      // This is the key part to ensure no caching for this specific fetch
-      // @ts-ignore // Ignore type error for this experimental option
-      cache: 'no-store',
-    })
+    .select('*')
     .order('created_at', { ascending: false });
 
   if (questionsError) {

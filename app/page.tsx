@@ -17,11 +17,8 @@ interface Question {
   created_at: string;
   user_id: string;
   upvotes: number;
-  // The profiles relationship will return an array of profiles,
-  // but since we're selecting a single profile per question,
-  // it will be an array with one element or an empty array.
-  // We'll type it as Profile[] and then access the first element.
-  profiles: Profile[];
+  // Corrected: profiles will be a single Profile object or null
+  profiles: Profile | null;
 }
 
 export default async function HomePage() {
@@ -38,8 +35,8 @@ export default async function HomePage() {
   const twitterUsername = session.user.user_metadata?.user_name || session.user.email;
 
   // Fetch questions and join with the profiles table to get author details
-  // Supabase's `select` with relationships returns an array for the joined table,
-  // even if it's a `single()` or `limit(1)` on the main query.
+  // Supabase's `select` with relationships will return a single object for one-to-one,
+  // or null if no related record is found.
   const { data: questions, error } = await supabase
     .from('questions')
     .select('*, profiles(username, avatar_url)') // Select all from questions, and specific fields from profiles
@@ -71,8 +68,8 @@ export default async function HomePage() {
         {questions && questions.length > 0 ? (
           <ul className="space-y-4">
             {questions.map((question: Question) => {
-              // Access the first element of the profiles array, if it exists
-              const authorProfile = question.profiles?.[0];
+              // Access the profile directly, as it's now typed as Profile | null
+              const authorProfile = question.profiles;
               return (
                 <li key={question.id} className="p-4 border border-gray-200 rounded-lg shadow-sm bg-white hover:shadow-md transition-shadow duration-200 flex justify-between items-center">
                   <div className="flex-grow">

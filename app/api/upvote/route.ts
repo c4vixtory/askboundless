@@ -2,7 +2,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { Database } from '@/types/supabase';
-import { revalidatePath } from 'next/cache'; // Import revalidatePath
+import { revalidateTag } from 'next/cache'; // Import revalidateTag
 
 export async function POST(request: Request) {
   const { questionId, userId, isCurrentlyUpvoted } = await request.json();
@@ -13,7 +13,6 @@ export async function POST(request: Request) {
 
     if (isCurrentlyUpvoted) {
       // User has upvoted, so they want to UN-UPVOTE
-      // 1. Delete the entry from user_upvotes
       const { error: deleteError } = await supabase
         .from('user_upvotes')
         .delete()
@@ -25,7 +24,6 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Failed to remove upvote record.' }, { status: 500 });
       }
 
-      // 2. Call the RPC to decrement upvotes and get the new count
       const { data: decrementedCount, error: rpcError } = await supabase.rpc('decrement_upvotes', { question_id_param: questionId });
 
       if (rpcError || decrementedCount === null) {
@@ -36,20 +34,18 @@ export async function POST(request: Request) {
 
     } else {
       // User has NOT upvoted, so they want to UPVOTE
-      // 1. Insert a new entry into user_upvotes
       const { error: insertError } = await supabase
         .from('user_upvotes')
         .insert({ user_id: userId, question_id: questionId });
 
       if (insertError) {
-        if (insertError.code === '23505') { // PostgreSQL unique_violation error code
+        if (insertError.code === '23505') {
           return NextResponse.json({ error: 'Already upvoted.' }, { status: 409 });
         }
         console.error('API Error: Failed to insert upvote record:', insertError);
         return NextResponse.json({ error: 'Failed to record upvote.' }, { status: 500 });
       }
 
-      // 2. Call the RPC to increment upvotes and get the new count
       const { data: incrementedCount, error: rpcError } = await supabase.rpc('increment_upvotes', { question_id_param: questionId });
 
       if (rpcError || incrementedCount === null) {
@@ -59,9 +55,8 @@ export async function POST(request: Request) {
       newUpvoteCount = incrementedCount;
     }
 
-    // --- NEW: Revalidate the paths that display questions to ensure fresh data ---
-    revalidatePath('/'); // Revalidate the homepage
-    revalidatePath(`/ask/${questionId}`); // Revalidate the specific question detail page
+    // --- NEW: Revalidate the 'questions' tag ---
+    revalidateTag('questions'); // Invalidate cache for all fetches tagged 'questions'
 
     return NextResponse.json({ newUpvoteCount }, { status: 200 });
 

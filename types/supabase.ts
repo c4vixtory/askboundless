@@ -76,9 +76,9 @@ export interface Database {
         };
         Relationships: [
           {
-            foreignKeyName: "questions_user_id_fkey"; // New foreign key
+            foreignKeyName: "questions_user_id_fkey";
             columns: ["user_id"];
-            referencedRelation: "profiles"; // References profiles table
+            referencedRelation: "profiles";
             referencedColumns: ["id"];
           },
         ];

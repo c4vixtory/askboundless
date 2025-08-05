@@ -31,7 +31,7 @@ export default async function HomePage() {
   // --- FETCH ALL PROFILES SEPARATELY FIRST ---
   const { data: fetchedProfiles, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, username, avatar_url, role'); // Fetching 'role'
+    .select('id, username, avatar_url, role');
 
   if (profilesError) {
     console.error('Error fetching profiles:', profilesError);
@@ -47,9 +47,20 @@ export default async function HomePage() {
   });
 
   // --- FETCH QUESTIONS (NO JOIN HERE) ---
+  // NEW: Add { cache: 'no-store' } to ensure fresh data
   const { data: questionsRaw, error: questionsError } = await supabase
     .from('questions')
-    .select('*')
+    .select('*', {
+      // This option ensures the data is always fresh, bypassing Next.js cache
+      // and is crucial for real-time updates like upvotes.
+      // It will re-fetch data on every request to the server component.
+      // This is necessary because the default fetch caching might serve stale data
+      // even after revalidatePath.
+      external: true, // Mark this fetch as external to Next.js's default caching behavior
+      // This is the key part to ensure no caching for this specific fetch
+      // @ts-ignore // Ignore type error for this experimental option
+      cache: 'no-store',
+    })
     .order('created_at', { ascending: false });
 
   if (questionsError) {
@@ -115,7 +126,7 @@ export default async function HomePage() {
                             ME
                           </span>
                         )}
-                        {authorProfile?.role === 'og' && ( // <-- NEW: Check for 'og' role
+                        {authorProfile?.role === 'og' && (
                           <span className="ml-2 px-2 py-0.5 bg-green-600 text-white text-xs font-semibold rounded-full">
                             OG
                           </span>

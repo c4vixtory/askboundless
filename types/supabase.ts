@@ -13,7 +13,7 @@ export interface Database {
         Row: {
           content: string;
           created_at: string;
-          id: string; // Changed to string for UUID
+          id: string; // UUID
           is_admin_comment: boolean;
           question_id: number;
           user_id: string;
@@ -21,7 +21,7 @@ export interface Database {
         Insert: {
           content: string;
           created_at?: string;
-          id?: string; // Changed to string for UUID
+          id?: string; // UUID
           is_admin_comment?: boolean;
           question_id: number;
           user_id?: string;
@@ -29,7 +29,7 @@ export interface Database {
         Update: {
           content?: string;
           created_at?: string;
-          id?: string; // Changed to string for UUID
+          id?: string; // UUID
           is_admin_comment?: boolean;
           question_id?: number;
           user_id?: string;
@@ -74,7 +74,14 @@ export interface Database {
           upvotes?: number;
           user_id?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "questions_user_id_fkey"; // New foreign key
+            columns: ["user_id"];
+            referencedRelation: "profiles"; // References profiles table
+            referencedColumns: ["id"];
+          },
+        ];
       };
       profiles: {
         Row: {

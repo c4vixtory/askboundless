@@ -15,24 +15,40 @@ export async function POST(request: Request) {
 
   const userId = session.user.id;
 
-  // --- NEW: Implement daily question limit ---
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  // --- NEW: Check if the user is an admin ---
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('is_admin')
+    .eq('id', userId)
+    .single();
 
-  const { count, error: countError } = await supabase
-    .from('questions')
-    .select('id', { count: 'exact' })
-    .eq('user_id', userId)
-    .gte('created_at', twentyFourHoursAgo); // Check questions created in the last 24 hours
-
-  if (countError) {
-    console.error('Error counting user questions:', countError);
-    return NextResponse.json({ error: 'Failed to check question limit.' }, { status: 500 });
+  if (profileError) {
+    console.error('Error fetching user profile for admin check:', profileError);
+    return NextResponse.json({ error: 'Failed to verify user status.' }, { status: 500 });
   }
 
-  if (count && count >= 3) { // Allow 3 questions, so if count is 3 or more, reject
-    return NextResponse.json({ error: 'You can only ask 3 questions per day. Please try again tomorrow.' }, { status: 429 }); // 429 Too Many Requests
+  const isAdmin = profile?.is_admin || false; // Default to false if profile not found or is_admin is null
+
+  // --- Conditional: Implement daily question limit ONLY if user is NOT admin ---
+  if (!isAdmin) {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const { count, error: countError } = await supabase
+      .from('questions')
+      .select('id', { count: 'exact' })
+      .eq('user_id', userId)
+      .gte('created_at', twentyFourHoursAgo);
+
+    if (countError) {
+      console.error('Error counting user questions:', countError);
+      return NextResponse.json({ error: 'Failed to check question limit.' }, { status: 500 });
+    }
+
+    if (count && count >= 3) {
+      return NextResponse.json({ error: 'You can only ask 3 questions per day. Please try again tomorrow.' }, { status: 429 });
+    }
   }
-  // --- END NEW: Implement daily question limit ---
+  // --- END Conditional: Implement daily question limit ---
 
   try {
     const { data, error } = await supabase

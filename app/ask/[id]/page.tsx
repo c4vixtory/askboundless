@@ -43,19 +43,19 @@ export default async function QuestionPage({ params }: QuestionPageProps) {
   }
 
   // --- FETCH ALL PROFILES SEPARATELY FIRST ---
-  // CONFIRM: Fetching 'role' here
-  const { data: profilesData, error: profilesError } = await supabase
+  const { data: fetchedProfiles, error: profilesError } = await supabase
     .from('profiles')
-    .select('id, username, avatar_url, role'); // <-- CONFIRM THIS IS 'role'
+    .select('id, username, avatar_url, role');
 
   if (profilesError) {
     console.error('Error fetching profiles:', profilesError);
+    // If there's an error, treat profilesData as an empty array to prevent further errors
   }
+  const profilesData = fetchedProfiles || []; // Ensure it's an array, even if fetch fails
 
   // Create a map for quick profile lookup by ID
   const profilesMap = new Map<string, Partial<ProfileRow>>();
-  profilesData?.forEach(profile => {
-    // This 'profile.id' check is correct, assuming 'profile' is not the SelectQueryError itself
+  profilesData.forEach(profile => { // No '?' needed here because profilesData is guaranteed array
     if (profile.id) {
       profilesMap.set(profile.id, profile);
     }

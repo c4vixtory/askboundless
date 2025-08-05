@@ -11,57 +11,98 @@ export interface Database {
     Tables: {
       questions: {
         Row: {
-          created_at: string
-          details: string | null
-          id: number
-          title: string | null
-          upvotes: number
-          user_id: string
-        }
+          created_at: string;
+          details: string | null;
+          id: number;
+          title: string | null;
+          upvotes: number;
+          user_id: string; // Assuming user_id is always present now
+        };
         Insert: {
-          created_at?: string
-          details?: string | null
-          id?: number
-          title?: string | null
-          upvotes?: number
-          user_id?: string
-        }
+          created_at?: string;
+          details?: string | null;
+          id?: number;
+          title?: string | null;
+          upvotes?: number;
+          user_id?: string;
+        };
         Update: {
-          created_at?: string
-          details?: string | null
-          id?: number
-          title?: string | null
-          upvotes?: number
-          user_id?: string
-        }
-        Relationships: []
-      }
+          created_at?: string;
+          details?: string | null;
+          id?: number;
+          title?: string | null;
+          upvotes?: number;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       profiles: {
         Row: {
-          id: string
-          username: string | null
-        }
+          id: string;
+          username: string | null;
+          avatar_url: string | null; // Added avatar_url to profiles table
+        };
         Insert: {
-          id?: string
-          username?: string | null
-        }
+          id?: string;
+          username?: string | null;
+          avatar_url?: string | null;
+        };
         Update: {
-          id?: string
-          username?: string | null
-        }
+          id?: string;
+          username?: string | null;
+          avatar_url?: string | null;
+        };
         Relationships: [
           {
-            foreignKeyName: "profiles_id_fkey"
-            columns: ["id"]
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-    }
-    Views: {}
-    Functions: {}
-    Enums: {}
-    CompositeTypes: {}
-  }
+            foreignKeyName: "profiles_id_fkey";
+            columns: ["id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      user_upvotes: {
+        Row: {
+          user_id: string;
+          question_id: number;
+          created_at: string;
+        };
+        Insert: {
+          user_id?: string;
+          question_id: number;
+          created_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          question_id?: number;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "user_upvotes_question_id_fkey";
+            columns: ["question_id"];
+            referencedRelation: "questions";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "user_upvotes_user_id_fkey";
+            columns: ["user_id"];
+            referencedRelation: "users";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+    };
+    Views: {};
+    Functions: {};
+    Enums: {};
+    CompositeTypes: {};
+  };
 }
+
+export type Tables<
+  T extends keyof Database['public']['Tables']
+> = Database['public']['Tables'][T]['Row']
+export type Enums<
+  T extends keyof Database['public']['Enums']
+> = Database['public']['Enums'][T]

@@ -4,7 +4,6 @@ import { NextResponse } from 'next/server';
 import { Database } from '@/types/supabase';
 
 export async function POST(request: Request) {
-  // Renamed hasUpvoted to isCurrentlyUpvoted to match client
   const { questionId, userId, isCurrentlyUpvoted } = await request.json();
   const supabase = createRouteHandlerClient<Database>({ cookies });
 
@@ -21,34 +20,23 @@ export async function POST(request: Request) {
         .eq('question_id', questionId);
 
       if (deleteError) {
-        console.error('Error deleting upvote record:', deleteError);
+        console.error('API Error: Failed to delete upvote record:', deleteError);
         return NextResponse.json({ error: 'Failed to remove upvote record.' }, { status: 500 });
       }
 
       // 2. Decrement the upvotes count in the questions table
-      // Fetch current upvotes to ensure we don't go below zero
-      const { data: currentQuestion, error: fetchError } = await supabase
+      const { data: updatedQuestion, error: updateError } = await supabase
         .from('questions')
-        .select('upvotes')
+        .update({ upvotes: (await supabase.rpc('decrement_upvotes', { question_id_param: questionId })).data }) // Using RPC for atomic decrement
         .eq('id', questionId)
+        .select('upvotes')
         .single();
 
-      if (fetchError || !currentQuestion) {
-        console.error('Error fetching current upvotes for decrement:', fetchError);
-        return NextResponse.json({ error: 'Failed to retrieve current upvotes.' }, { status: 500 });
-      }
-
-      newUpvoteCount = Math.max(0, currentQuestion.upvotes - 1);
-
-      const { error: updateError } = await supabase
-        .from('questions')
-        .update({ upvotes: newUpvoteCount })
-        .eq('id', questionId);
-
-      if (updateError) {
-        console.error('Error decrementing question upvotes:', updateError);
+      if (updateError || !updatedQuestion) {
+        console.error('API Error: Failed to decrement question upvotes:', updateError);
         return NextResponse.json({ error: 'Failed to decrement question upvotes.' }, { status: 500 });
       }
+      newUpvoteCount = updatedQuestion.upvotes;
 
     } else {
       // User has NOT upvoted, so they want to UPVOTE
@@ -58,54 +46,29 @@ export async function POST(request: Request) {
         .insert({ user_id: userId, question_id: questionId });
 
       if (insertError) {
-        // If this is a unique constraint violation (user already upvoted), handle gracefully
         if (insertError.code === '23505') { // PostgreSQL unique_violation error code
           return NextResponse.json({ error: 'Already upvoted.' }, { status: 409 });
         }
-        console.error('Error inserting upvote record:', insertError);
+        console.error('API Error: Failed to insert upvote record:', insertError);
         return NextResponse.json({ error: 'Failed to record upvote.' }, { status: 500 });
       }
 
       // 2. Increment the upvotes count in the questions table
-      // Fetch current upvotes
-      const { data: currentQuestion, error: fetchError } = await supabase
+      const { data: updatedQuestion, error: updateError } = await supabase
         .from('questions')
-        .select('upvotes')
+        .update({ upvotes: (await supabase.rpc('increment_upvotes', { question_id_param: questionId })).data }) // Using RPC for atomic increment
         .eq('id', questionId)
+        .select('upvotes')
         .single();
 
-      if (fetchError || !currentQuestion) {
-        console.error('Error fetching current upvotes for increment:', fetchError);
-        return NextResponse.json({ error: 'Failed to retrieve current upvotes.' }, { status: 500 });
-      }
-
-      newUpvoteCount = currentQuestion.upvotes + 1;
-
-      const { error: updateError } = await supabase
-        .from('questions')
-        .update({ upvotes: newUpvoteCount })
-        .eq('id', questionId);
-
-      if (updateError) {
-        console.error('Error incrementing question upvotes:', updateError);
+      if (updateError || !updatedQuestion) {
+        console.error('API Error: Failed to increment question upvotes:', updateError);
         return NextResponse.json({ error: 'Failed to increment question upvotes.' }, { status: 500 });
       }
+      newUpvoteCount = updatedQuestion.upvotes;
     }
 
-    // After successful operation, fetch the final upvote count from the database
-    // to ensure consistency, then return it.
-    const { data: finalQuestion, error: finalFetchError } = await supabase
-        .from('questions')
-        .select('upvotes')
-        .eq('id', questionId)
-        .single();
-
-    if (finalFetchError || !finalQuestion) {
-        console.error('Error fetching final upvote count:', finalFetchError);
-        return NextResponse.json({ error: 'Failed to retrieve final upvote count.' }, { status: 500 });
-    }
-
-    return NextResponse.json({ newUpvoteCount: finalQuestion.upvotes }, { status: 200 });
+    return NextResponse.json({ newUpvoteCount }, { status: 200 });
 
   } catch (err: any) {
     console.error('Upvote API unexpected error:', err.message);

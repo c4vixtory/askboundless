@@ -52,4 +52,3 @@ export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButto
     </button>
   );
 }
-

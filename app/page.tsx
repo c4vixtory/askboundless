@@ -6,19 +6,13 @@ import { redirect } from 'next/navigation';
 import SignOutButton from '@/components/SignOutButton';
 import UpvoteButton from '@/components/UpvoteButton';
 
-// Define the type for the joined profile data
-type Profile = Database['public']['Tables']['profiles']['Row'];
+// Define base types from the database
+type ProfileRow = Database['public']['Tables']['profiles']['Row'];
+type QuestionRow = Database['public']['Tables']['questions']['Row'];
 
-// Define the type for a question with its author's profile
-interface Question {
-  id: number;
-  title: string;
-  details: string;
-  created_at: string;
-  user_id: string;
-  upvotes: number;
-  // Corrected: profiles will be a single Profile object or null
-  profiles: Profile | null;
+// Combined type for Question with manually joined author profile
+interface QuestionWithProfile extends QuestionRow {
+  authorProfile: Partial<ProfileRow> | null; // Profile for the question author
 }
 
 export default async function HomePage() {
@@ -34,18 +28,40 @@ export default async function HomePage() {
 
   const twitterUsername = session.user.user_metadata?.user_name || session.user.email;
 
-  // Fetch questions and join with the profiles table to get author details
-  // Supabase's `select` with relationships will return a single object for one-to-one,
-  // or null if no related record is found.
-  const { data: questions, error } = await supabase
+  // --- FETCH ALL PROFILES SEPARATELY FIRST ---
+  const { data: profilesData, error: profilesError } = await supabase
+    .from('profiles')
+    .select('id, username, avatar_url');
+
+  if (profilesError) {
+    console.error('Error fetching profiles:', profilesError);
+    // Log the error but proceed, authors will show 'Anonymous' if profiles fail
+  }
+
+  // Create a map for quick profile lookup by ID
+  const profilesMap = new Map<string, Partial<ProfileRow>>();
+  profilesData?.forEach(profile => {
+    if (profile.id) {
+      profilesMap.set(profile.id, profile);
+    }
+  });
+
+  // --- FETCH QUESTIONS (NO JOIN HERE) ---
+  const { data: questionsRaw, error: questionsError } = await supabase
     .from('questions')
-    .select('*, profiles(username, avatar_url)') // Select all from questions, and specific fields from profiles
+    .select('*') // Select all columns from questions table, NO JOIN HERE
     .order('created_at', { ascending: false });
 
-  if (error) {
-    console.error('Error fetching questions:', error);
+  if (questionsError) {
+    console.error('Error fetching questions:', questionsError);
     return <p className="text-red-500 text-center">Failed to load questions.</p>;
   }
+
+  // --- MANUALLY JOIN QUESTIONS WITH PROFILES ---
+  const questions: QuestionWithProfile[] = (questionsRaw || []).map(question => ({
+    ...question,
+    authorProfile: profilesMap.get(question.user_id) || null, // Attach profile or null
+  }));
 
   return (
     <div className="space-y-6 p-4 sm:p-6 md:p-8">
@@ -67,13 +83,16 @@ export default async function HomePage() {
         <h2 className="text-xl font-semibold">Latest Questions</h2>
         {questions && questions.length > 0 ? (
           <ul className="space-y-4">
-            {questions.map((question: Question) => {
-              // Access the profile directly, as it's now typed as Profile | null
-              const authorProfile = question.profiles;
+            {questions.map((question: QuestionWithProfile) => { // Use QuestionWithProfile here
+              const authorProfile = question.authorProfile; // Access the manually joined profile
               return (
                 <li key={question.id} className="p-4 border border-gray-200 rounded-lg shadow-sm bg-white hover:shadow-md transition-shadow duration-200 flex justify-between items-center">
                   <div className="flex-grow">
-                    <h3 className="text-lg font-medium text-gray-900">{question.title}</h3>
+                    <h3 className="text-lg font-medium text-gray-900">
+                      <Link href={`/ask/${question.id}`} className="hover:underline">
+                        {question.title}
+                      </Link>
+                    </h3>
                     <p className="text-sm text-gray-600 mt-1">{question.details}</p>
                     <div className="flex items-center text-xs text-gray-400 mt-2">
                       {authorProfile?.avatar_url && (

@@ -15,6 +15,7 @@ export interface Database {
           created_at: string;
           id: string; // UUID
           is_admin_comment: boolean;
+          is_pinned: boolean; // <-- NEW: is_pinned column
           question_id: number;
           user_id: string;
         };
@@ -23,6 +24,7 @@ export interface Database {
           created_at?: string;
           id?: string; // UUID
           is_admin_comment?: boolean;
+          is_pinned?: boolean; // <-- NEW: is_pinned column
           question_id: number;
           user_id?: string;
         };
@@ -31,6 +33,7 @@ export interface Database {
           created_at?: string;
           id?: string; // UUID
           is_admin_comment?: boolean;
+          is_pinned?: boolean; // <-- NEW: is_pinned column
           question_id?: number;
           user_id?: string;
         };
@@ -88,19 +91,19 @@ export interface Database {
           id: string;
           username: string | null;
           avatar_url: string | null;
-          role: string; // <-- CONFIRM THIS IS 'role' AND NOT 'is_admin'
+          role: string;
         };
         Insert: {
           id?: string;
           username?: string | null;
           avatar_url?: string | null;
-          role?: string; // <-- CONFIRM THIS IS 'role'
+          role?: string;
         };
         Update: {
           id?: string;
           username?: string | null;
           avatar_url?: string | null;
-          role?: string; // <-- CONFIRM THIS IS 'role'
+          role?: string;
         };
         Relationships: [
           {
@@ -165,4 +168,3 @@ export type Tables<
 export type Enums<
   T extends keyof Database['public']['Enums']
 > = Database['public']['Enums'][T]
-

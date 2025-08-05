@@ -15,10 +15,10 @@ export async function POST(request: Request) {
 
   const userId = session.user.id;
 
-  // --- NEW: Check the user's role ---
+  // --- Check the user's role ---
   const { data: profile, error: profileError } = await supabase
     .from('profiles')
-    .select('role') // <-- Select the 'role' column instead of 'is_admin'
+    .select('role')
     .eq('id', userId)
     .single();
 
@@ -29,8 +29,8 @@ export async function POST(request: Request) {
 
   const userRole = profile?.role || 'user'; // Default to 'user' if role not found or null
 
-  // --- Conditional: Implement daily question limit ONLY if user is NOT admin or ME ---
-  if (userRole !== 'admin' && userRole !== 'me') { // <-- Check for both 'admin' and 'me' roles
+  // --- Conditional: Implement daily question limit ONLY if user is NOT admin, ME, or OG ---
+  if (userRole !== 'admin' && userRole !== 'me' && userRole !== 'og') { // <-- NEW: Check for 'og' role
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     const { count, error: countError } = await supabase

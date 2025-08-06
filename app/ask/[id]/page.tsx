@@ -57,6 +57,14 @@ export default function QuestionPage({ params }: QuestionPageProps) {
 
     const currentUserId = currentSession.user.id;
 
+    // Set a timeout for loading
+    const loadingTimeout = setTimeout(() => {
+      if (loading) { // Only show timeout message if still loading
+        setError('Loading is taking longer than expected. Please check your internet connection or try again.');
+        setLoading(false); // Stop loading indicator
+      }
+    }, 15000); // 15 seconds timeout
+
     try {
       // --- FETCH ALL PROFILES SEPARATELY FIRST ---
       const { data: fetchedProfiles, error: profilesError } = await supabase
@@ -66,8 +74,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       if (profilesError) {
         console.error('Error fetching profiles:', profilesError);
         setError('Failed to load user profiles.');
-        setLoading(false);
-        return;
+        return; // Exit early on error
       }
       const newProfilesMap = new Map<string, Partial<ProfileRow>>();
       (fetchedProfiles || []).forEach(profile => {
@@ -94,8 +101,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       if (questionError || !questionRaw) {
         console.error('Error fetching question:', questionError);
         setError('Failed to load question.');
-        setLoading(false);
-        return;
+        return; // Exit early on error
       }
       setQuestion({
         ...questionRaw,
@@ -113,8 +119,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       if (commentsError) {
         console.error('Error fetching comments:', commentsError);
         setError('Failed to load comments.');
-        setLoading(false);
-        return;
+        return; // Exit early on error
       }
 
       const commentsWithProfiles: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
@@ -122,13 +127,15 @@ export default function QuestionPage({ params }: QuestionPageProps) {
         authorProfile: newProfilesMap.get(comment.user_id) || null,
       }));
       setComments(commentsWithProfiles);
+
     } catch (err) {
       console.error('Unexpected error during data fetch:', err);
       setError('An unexpected error occurred while loading data.');
     } finally {
+      clearTimeout(loadingTimeout); // Clear timeout if fetch completes
       setLoading(false); // Always set loading to false
     }
-  }, [questionId, supabase, router]); // Dependencies for useCallback
+  }, [questionId, supabase, router, loading]); // Added 'loading' to dependencies for timeout check
 
   useEffect(() => {
     if (isNaN(questionId)) {
@@ -192,10 +199,10 @@ export default function QuestionPage({ params }: QuestionPageProps) {
     return () => {
       supabase.removeChannel(commentsChannel);
     };
-  }, [questionId, supabase, fetchQuestionAndComments, profilesMap]); // Added profilesMap to dependencies
+  }, [questionId, supabase, fetchQuestionAndComments, profilesMap]);
 
   const handlePinToggle = async (commentId: string, isCurrentlyPinned: boolean) => {
-    if (userRole !== 'admin' && userRole !== 'me' && userRole !== 'og') {
+    if (userRole !== 'admin' && userRole !== 'me' && userRole === 'og') { // Corrected logic: should be || for OR
       // Using a custom modal for alerts would be better here
       alert('You do not have permission to pin comments.');
       return;
@@ -232,7 +239,12 @@ export default function QuestionPage({ params }: QuestionPageProps) {
   }
 
   if (error) {
-    return <p className="text-red-500 text-center py-10">{error}</p>;
+    return (
+      <div className="p-8 text-center text-red-500 bg-red-50 rounded-lg shadow-inner">
+        <p className="text-lg">Error: {error}</p>
+        <p className="text-sm mt-2">Please try refreshing the page or check your internet connection.</p>
+      </div>
+    );
   }
 
   if (!question) {

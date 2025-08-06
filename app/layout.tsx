@@ -25,28 +25,27 @@ export default async function RootLayout({
 
   return (
     <html lang="en" className={inter.className}>
-      <body className="bg-gray-50 min-h-screen flex flex-col text-gray-800 antialiased"> {/* Smoother background, better text, antialiased */}
-        <header className="bg-white shadow-sm py-4 px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center sm:items-center border-b border-gray-100"> {/* Softer shadow, subtle border */}
-          <Link href="/" className="text-2xl font-extrabold text-blue-700 mb-2 sm:mb-0 tracking-tight"> {/* Bolder, blue title */}
+      <body className="bg-gray-50 min-h-screen flex flex-col text-gray-800 antialiased">
+        <header className="bg-white shadow-sm py-4 px-4 sm:px-6 flex flex-col sm:flex-row justify-between items-center sm:items-center border-b border-gray-100">
+          <Link href="/" className="text-2xl font-extrabold text-blue-700 mb-2 sm:mb-0 tracking-tight">
             Ask Boundless
           </Link>
           <nav className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto mt-2 sm:mt-0">
             {session ? (
               <>
                 <div className="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-4 w-full sm:w-auto">
-                  <Link href="/my-questions" className="text-gray-600 hover:text-blue-600 transition-colors duration-200 text-sm sm:text-base font-medium"> {/* Slightly darker text, medium weight */}
+                  {/* NEW: My Questions as a subtle button */}
+                  <Link href="/my-questions" className="px-4 py-2 rounded-lg text-sm sm:text-base font-medium text-blue-600 border border-blue-300 hover:bg-blue-50 hover:border-blue-400 transition-colors duration-200">
                     My Questions
                   </Link>
-                  <Link href="/ask" className="text-gray-600 hover:text-blue-600 transition-colors duration-200 text-sm sm:text-base font-medium"> {/* Slightly darker text, medium weight */}
-                    Ask a Question
-                  </Link>
+                  {/* REMOVED: Ask a Question link from header */}
                 </div>
                 <div className="flex items-center space-x-2 mt-2 sm:mt-0">
                   {session.user.user_metadata?.avatar_url && (
                     <img
                       src={session.user.user_metadata.avatar_url}
                       alt="User Avatar"
-                      className="w-8 h-8 rounded-full border-2 border-blue-400" // Added border to avatar
+                      className="w-8 h-8 rounded-full border-2 border-blue-400"
                     />
                   )}
                   <span className="text-gray-700 text-sm sm:text-base whitespace-nowrap font-medium">Welcome, {session.user.user_metadata?.user_name || session.user.email}</span>

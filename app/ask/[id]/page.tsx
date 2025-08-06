@@ -1,14 +1,12 @@
-// Removed: export const dynamic = 'force-dynamic'; // No longer strictly needed for upvote persistence with real-time
-
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react'; // Added useCallback
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Database } from '@/types/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import CommentForm from '@/components/CommentForm';
-import UpvoteButton from '@/components/UpvoteButton'; // Make sure UpvoteButton is imported
+import UpvoteButton from '@/components/UpvoteButton';
 
 // Define base types from the database
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -42,95 +40,159 @@ export default function QuestionPage({ params }: QuestionPageProps) {
   const [session, setSession] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>('user');
 
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      setError(null);
+  // useCallback to memoize the fetch function, preventing unnecessary re-creations
+  const fetchQuestionAndComments = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      setSession(currentSession);
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    setSession(currentSession);
 
-      if (!currentSession) {
-        router.push('/login');
-        return;
-      }
+    if (!currentSession) {
+      router.push('/login');
+      return;
+    }
 
-      const currentUserId = currentSession.user.id;
+    const currentUserId = currentSession.user.id;
 
-      // --- FETCH ALL PROFILES SEPARATELY FIRST ---
-      const { data: fetchedProfiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, username, avatar_url, role');
+    // --- FETCH ALL PROFILES SEPARATELY FIRST ---
+    const { data: fetchedProfiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, username, avatar_url, role');
 
-      if (profilesError) {
-        console.error('Error fetching profiles:', profilesError);
-        setError('Failed to load user profiles.');
-        setLoading(false);
-        return;
-      }
-      const profilesData = fetchedProfiles || [];
-      const profilesMap = new Map<string, Partial<ProfileRow>>();
-      profilesData.forEach(profile => {
-        if (profile.id) {
-          profilesMap.set(profile.id, profile);
-        }
-      });
-
-      // Determine current user's role
-      const currentUserProfile = profilesMap.get(currentUserId);
-      setUserRole(currentUserProfile?.role || 'user');
-
-      // --- FETCH THE SPECIFIC QUESTION ---
-      const { data: questionRaw, error: questionError } = await supabase
-        .from('questions')
-        .select('*', {
-          // @ts-ignore
-          next: { tags: ['questions'] },
-        })
-        .eq('id', questionId)
-        .single();
-
-      if (questionError || !questionRaw) {
-        console.error('Error fetching question:', questionError);
-        setError('Failed to load question.');
-        setLoading(false);
-        return;
-      }
-      setQuestion({
-        ...questionRaw,
-        authorProfile: profilesMap.get(questionRaw.user_id) || null,
-      });
-
-      // --- FETCH COMMENTS FOR THIS QUESTION ---
-      const { data: commentsRaw, error: commentsError } = await supabase
-        .from('comments')
-        .select('*', {
-          // @ts-ignore
-          next: { tags: ['comments'] },
-        })
-        .eq('question_id', questionId)
-        .order('is_pinned', { ascending: false })
-        .order('created_at', { ascending: true });
-
-      if (commentsError) {
-        console.error('Error fetching comments:', commentsError);
-        setError('Failed to load comments.');
-        setLoading(false);
-        return;
-      }
-
-      const commentsWithProfiles: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
-        ...comment,
-        authorProfile: profilesMap.get(comment.user_id) || null,
-      }));
-      setComments(commentsWithProfiles);
+    if (profilesError) {
+      console.error('Error fetching profiles:', profilesError);
+      setError('Failed to load user profiles.');
       setLoading(false);
+      return;
+    }
+    const profilesData = fetchedProfiles || [];
+    const profilesMap = new Map<string, Partial<ProfileRow>>();
+    profilesData.forEach(profile => {
+      if (profile.id) {
+        profilesMap.set(profile.id, profile);
+      }
+    });
+
+    // Determine current user's role
+    const currentUserProfile = profilesMap.get(currentUserId);
+    setUserRole(currentUserProfile?.role || 'user');
+
+    // --- FETCH THE SPECIFIC QUESTION ---
+    const { data: questionRaw, error: questionError } = await supabase
+      .from('questions')
+      .select('*', {
+        // @ts-ignore
+        next: { tags: ['questions'] },
+      })
+      .eq('id', questionId)
+      .single();
+
+    if (questionError || !questionRaw) {
+      console.error('Error fetching question:', questionError);
+      setError('Failed to load question.');
+      setLoading(false);
+      return;
+    }
+    setQuestion({
+      ...questionRaw,
+      authorProfile: profilesMap.get(questionRaw.user_id) || null,
+    });
+
+    // --- FETCH COMMENTS FOR THIS QUESTION ---
+    const { data: commentsRaw, error: commentsError } = await supabase
+      .from('comments')
+      .select('*')
+      .eq('question_id', questionId)
+      .order('is_pinned', { ascending: false })
+      .order('created_at', { ascending: true });
+
+    if (commentsError) {
+      console.error('Error fetching comments:', commentsError);
+      setError('Failed to load comments.');
+      setLoading(false);
+      return;
     }
 
-    if (!isNaN(questionId)) {
-      fetchData();
+    const commentsWithProfiles: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
+      ...comment,
+      authorProfile: profilesMap.get(comment.user_id) || null,
+    }));
+    setComments(commentsWithProfiles);
+    setLoading(false);
+  }, [questionId, supabase, router]); // Dependencies for useCallback
+
+  useEffect(() => {
+    if (isNaN(questionId)) {
+      setError('Invalid question ID.');
+      setLoading(false);
+      return;
     }
-  }, [questionId, supabase, router]);
+
+    fetchQuestionAndComments(); // Initial fetch
+
+    // --- Real-time Listener for Comments ---
+    const commentsChannel = supabase
+      .channel(`comments_for_question:${questionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen for INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'comments',
+          filter: `question_id=eq.${questionId}`,
+        },
+        (payload) => {
+          setComments((prevComments) => {
+            let newComments = [...prevComments];
+            const newComment = payload.new as CommentRow;
+            const oldComment = payload.old as CommentRow;
+
+            // Get profile for the new/updated comment
+            const commentAuthorProfile = (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')
+              ? (newComment.user_id ? (newComment as CommentWithProfile).authorProfile || {} : {})
+              : (oldComment.user_id ? (oldComment as CommentWithProfile).authorProfile || {} : {});
+
+            // Re-fetch profile for new/updated comment to ensure role is current
+            // This is important because the initial payload.new might not have the full profile
+            supabase.from('profiles').select('id, username, avatar_url, role').eq('id', newComment.user_id || oldComment.user_id).single()
+              .then(({ data: profileData }) => {
+                const updatedCommentWithProfile = {
+                  ...(newComment || oldComment),
+                  authorProfile: profileData || null,
+                } as CommentWithProfile;
+
+                if (payload.eventType === 'INSERT') {
+                  newComments.push(updatedCommentWithProfile);
+                } else if (payload.eventType === 'UPDATE') {
+                  const index = newComments.findIndex(c => c.id === updatedCommentWithProfile.id);
+                  if (index !== -1) {
+                    newComments[index] = updatedCommentWithProfile;
+                  }
+                } else if (payload.eventType === 'DELETE') {
+                  newComments = newComments.filter(c => c.id !== oldComment.id);
+                }
+
+                // Re-sort comments after any change
+                newComments.sort((a, b) => {
+                  if (a.is_pinned && !b.is_pinned) return -1;
+                  if (!a.is_pinned && b.is_pinned) return 1;
+                  return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+                });
+
+                setComments(newComments);
+              })
+              .catch(err => console.error("Error fetching profile for real-time comment:", err));
+          });
+        }
+      )
+      .subscribe();
+
+    // Cleanup function
+    return () => {
+      supabase.removeChannel(commentsChannel);
+    };
+  }, [questionId, supabase, fetchQuestionAndComments]); // Added fetchQuestionAndComments to dependencies
 
   const handlePinToggle = async (commentId: string, isCurrentlyPinned: boolean) => {
     if (userRole !== 'admin' && userRole !== 'me' && userRole !== 'og') {
@@ -147,12 +209,11 @@ export default function QuestionPage({ params }: QuestionPageProps) {
         body: JSON.stringify({ commentId, questionId, isCurrentlyPinned }),
       });
 
-      if (response.ok) {
-        router.refresh();
-      } else {
+      if (!response.ok) {
         const errorData = await response.json();
         alert(`Failed to update pin status: ${errorData.error}`);
       }
+      // No need for router.refresh() here, real-time listener will update UI
     } catch (err) {
       console.error('Network error during pin toggle:', err);
       alert('An unexpected error occurred. Please try again.');

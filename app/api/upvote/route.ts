@@ -2,7 +2,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { Database } from '@/types/supabase';
-import { revalidateTag } from 'next/cache'; // Import revalidateTag
+// import { revalidateTag } from 'next/cache'; // No longer needed for real-time updates
 
 export async function POST(request: Request) {
   const { questionId, userId, isCurrentlyUpvoted } = await request.json();
@@ -55,8 +55,8 @@ export async function POST(request: Request) {
       newUpvoteCount = incrementedCount;
     }
 
-    // --- NEW: Revalidate the 'questions' tag ---
-    revalidateTag('questions'); // Invalidate cache for all fetches tagged 'questions'
+    // --- REMOVED: revalidateTag('questions'); ---
+    // No longer needed as client-side real-time subscription handles UI updates
 
     return NextResponse.json({ newUpvoteCount }, { status: 200 });
 

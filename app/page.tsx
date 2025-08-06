@@ -129,8 +129,8 @@ export default async function HomePage() {
                       <span className="ml-1">on {new Date(question.created_at).toLocaleString()}</span>
                     </Link>
                   </div>
-                  {/* NEW: Add key prop to force re-render when upvotes change */}
-                  <UpvoteButton key={question.id + '-' + question.upvotes} initialUpvotes={question.upvotes} questionId={question.id} />
+                  {/* REMOVED key={question.id + '-' + question.upvotes} */}
+                  <UpvoteButton initialUpvotes={question.upvotes} questionId={question.id} />
                 </li>
               );
             })}

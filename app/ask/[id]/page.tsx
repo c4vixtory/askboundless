@@ -1,3 +1,5 @@
+// Removed: export const dynamic = 'force-dynamic'; // No longer strictly needed for upvote persistence with real-time
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,6 +8,7 @@ import { Database } from '@/types/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import CommentForm from '@/components/CommentForm';
+import UpvoteButton from '@/components/UpvoteButton'; // Make sure UpvoteButton is imported
 
 // Define base types from the database
 type ProfileRow = Database['public']['Tables']['profiles']['Row'];
@@ -78,12 +81,11 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       setUserRole(currentUserProfile?.role || 'user');
 
       // --- FETCH THE SPECIFIC QUESTION ---
-      // Data will be fresh due to 'force-dynamic' on the page
       const { data: questionRaw, error: questionError } = await supabase
         .from('questions')
         .select('*', {
           // @ts-ignore
-          next: { tags: ['questions'] }, // Ensure this tag is present
+          next: { tags: ['questions'] },
         })
         .eq('id', questionId)
         .single();
@@ -100,12 +102,11 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       });
 
       // --- FETCH COMMENTS FOR THIS QUESTION ---
-      // Data will be fresh due to 'force-dynamic' on the page
       const { data: commentsRaw, error: commentsError } = await supabase
         .from('comments')
         .select('*', {
           // @ts-ignore
-          next: { tags: ['comments'] }, // Ensure this tag is present
+          next: { tags: ['comments'] },
         })
         .eq('question_id', questionId)
         .order('is_pinned', { ascending: false })
@@ -147,7 +148,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       });
 
       if (response.ok) {
-        router.refresh(); // This will trigger fetchData in useEffect
+        router.refresh();
       } else {
         const errorData = await response.json();
         alert(`Failed to update pin status: ${errorData.error}`);

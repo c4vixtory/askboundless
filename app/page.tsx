@@ -1,10 +1,10 @@
-// Remove: export const dynamic = 'force-dynamic'; // No longer needed, revalidateTag handles freshness
+'use client';
 
-import { useState, useEffect } from 'react'; // Import useState and useEffect
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'; // Use client component client
+import { useState, useEffect, useCallback } from 'react'; // Added useCallback
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Database } from '@/types/supabase';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation'; // Import useRouter
+import { useRouter } from 'next/navigation';
 import SignOutButton from '@/components/SignOutButton';
 import UpvoteButton from '@/components/UpvoteButton';
 
@@ -14,12 +14,12 @@ type QuestionRow = Database['public']['Tables']['questions']['Row'];
 
 // Combined type for Question with manually joined author profile
 interface QuestionWithProfile extends QuestionRow {
-  authorProfile: Partial<ProfileRow> | null; // Profile for the question author
+  authorProfile: Partial<ProfileRow> | null;
 }
 
-export default function HomePage() { // Changed to client component
-  const supabase = createClientComponentClient<Database>(); // Use client component client
-  const router = useRouter(); // Initialize useRouter
+export default function HomePage() {
+  const supabase = createClientComponentClient<Database>();
+  const router = useRouter();
 
   const [questions, setQuestions] = useState<QuestionWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,77 +27,74 @@ export default function HomePage() { // Changed to client component
   const [session, setSession] = useState<any>(null);
   const [profilesMap, setProfilesMap] = useState<Map<string, Partial<ProfileRow>>>(new Map());
 
+  // Use useCallback to memoize fetchData, so it doesn't change on every render
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
 
-  useEffect(() => {
-    async function fetchData() {
-      setLoading(true);
-      setError(null);
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    setSession(currentSession);
 
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      setSession(currentSession);
-
-      if (!currentSession) {
-        router.push('/login'); // Redirect if not logged in
-        setLoading(false); // Ensure loading is false on redirect
-        return;
-      }
-
-      try {
-        // --- FETCH ALL PROFILES SEPARATELY FIRST ---
-        const { data: fetchedProfiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('id, username, avatar_url, role');
-
-        if (profilesError) {
-          console.error('Error fetching profiles:', profilesError);
-          setError('Failed to load user profiles.');
-          setLoading(false);
-          return;
-        }
-        const newProfilesMap = new Map<string, Partial<ProfileRow>>();
-        (fetchedProfiles || []).forEach(profile => {
-          if (profile.id) {
-            newProfilesMap.set(profile.id, profile);
-          }
-        });
-        setProfilesMap(newProfilesMap);
-
-
-        // --- FETCH QUESTIONS ---
-        const { data: questionsRaw, error: questionsError } = await supabase
-          .from('questions')
-          .select('*', {
-            // @ts-ignore
-            next: { tags: ['questions'] },
-          })
-          .order('created_at', { ascending: false });
-
-        if (questionsError) {
-          console.error('Error fetching questions:', questionsError);
-          setError('Failed to load questions.');
-          setLoading(false);
-          return;
-        }
-
-        const questionsWithProfiles: QuestionWithProfile[] = (questionsRaw || []).map(question => ({
-          ...question,
-          authorProfile: newProfilesMap.get(question.user_id) || null,
-        }));
-        setQuestions(questionsWithProfiles);
-
-      } catch (err) {
-        console.error('Unexpected error during data fetch:', err);
-        setError('An unexpected error occurred while loading data.');
-      } finally {
-        setLoading(false); // Always set loading to false
-      }
+    if (!currentSession) {
+      router.push('/login');
+      setLoading(false);
+      return;
     }
 
-    fetchData();
-  }, [supabase, router]); // Dependencies for useEffect
+    try {
+      // --- FETCH ALL PROFILES SEPARATELY FIRST ---
+      const { data: fetchedProfiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, avatar_url, role');
+
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        setError('Failed to load user profiles.');
+        return; // Don't proceed if profiles fail
+      }
+      const newProfilesMap = new Map<string, Partial<ProfileRow>>();
+      (fetchedProfiles || []).forEach(profile => {
+        if (profile.id) {
+          newProfilesMap.set(profile.id, profile);
+        }
+      });
+      setProfilesMap(newProfilesMap);
 
 
-  const twitterUsername = session?.user?.user_metadata?.user_name || session?.user?.email || 'Guest'; // Handle session being null initially
+      // --- FETCH QUESTIONS ---
+      const { data: questionsRaw, error: questionsError } = await supabase
+        .from('questions')
+        .select('*', {
+          // @ts-ignore
+          next: { tags: ['questions'] },
+        })
+        .order('created_at', { ascending: false });
+
+      if (questionsError) {
+        console.error('Error fetching questions:', questionsError);
+        setError('Failed to load questions.');
+        return; // Don't proceed if questions fail
+      }
+
+      const questionsWithProfiles: QuestionWithProfile[] = (questionsRaw || []).map(question => ({
+        ...question,
+        authorProfile: newProfilesMap.get(question.user_id) || null,
+      }));
+      setQuestions(questionsWithProfiles);
+
+    } catch (err) {
+      console.error('Unexpected error during data fetch:', err);
+      setError('An unexpected error occurred while loading data.');
+    } finally {
+      setLoading(false); // Always set loading to false after fetch attempt
+    }
+  }, [supabase, router]); // Dependencies for useCallback: only supabase and router
+
+  useEffect(() => {
+    fetchData(); // Call fetchData only when component mounts or fetchData itself changes (which it won't due to useCallback)
+  }, [fetchData]); // Dependency: fetchData (memoized by useCallback)
+
+  const twitterUsername = session?.user?.user_metadata?.user_name || session?.user?.email || 'Guest';
 
   return (
     <div className="space-y-8 p-4 sm:p-6 md:p-8 max-w-4xl mx-auto">

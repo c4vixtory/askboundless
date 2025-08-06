@@ -1,5 +1,3 @@
-// Remove: export const dynamic = 'force-dynamic'; // No longer needed, revalidateTag handles freshness
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -80,12 +78,12 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       setUserRole(currentUserProfile?.role || 'user');
 
       // --- FETCH THE SPECIFIC QUESTION ---
-      // NEW: Add next: { tags: ['questions'] } for granular revalidation
+      // Data will be fresh due to 'force-dynamic' on the page
       const { data: questionRaw, error: questionError } = await supabase
         .from('questions')
         .select('*', {
           // @ts-ignore
-          next: { tags: ['questions'] },
+          next: { tags: ['questions'] }, // Ensure this tag is present
         })
         .eq('id', questionId)
         .single();
@@ -102,12 +100,12 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       });
 
       // --- FETCH COMMENTS FOR THIS QUESTION ---
-      // NEW: Add next: { tags: ['comments'] } for granular revalidation
+      // Data will be fresh due to 'force-dynamic' on the page
       const { data: commentsRaw, error: commentsError } = await supabase
         .from('comments')
         .select('*', {
           // @ts-ignore
-          next: { tags: ['comments'] },
+          next: { tags: ['comments'] }, // Ensure this tag is present
         })
         .eq('question_id', questionId)
         .order('is_pinned', { ascending: false })

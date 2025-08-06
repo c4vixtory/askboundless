@@ -41,112 +41,115 @@ export default function QuestionPage({ params }: QuestionPageProps) {
   const [userRole, setUserRole] = useState<string>('user');
   const [profilesMap, setProfilesMap] = useState<Map<string, Partial<ProfileRow>>>(new Map()); // Store profiles map in state
 
-  // useCallback to memoize the fetch function, preventing unnecessary re-creations
-  const fetchQuestionAndComments = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    const { data: { session: currentSession } } = await supabase.auth.getSession();
-    setSession(currentSession);
-
-    if (!currentSession) {
-      router.push('/login');
-      setLoading(false); // Ensure loading is false on redirect
-      return;
-    }
-
-    const currentUserId = currentSession.user.id;
-
-    // Set a timeout for loading
-    const loadingTimeout = setTimeout(() => {
-      if (loading) { // Only show timeout message if still loading
-        setError('Loading is taking longer than expected. Please check your internet connection or try again.');
-        setLoading(false); // Stop loading indicator
-      }
-    }, 15000); // 15 seconds timeout
-
-    try {
-      // --- FETCH ALL PROFILES SEPARATELY FIRST ---
-      const { data: fetchedProfiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, username, avatar_url, role');
-
-      if (profilesError) {
-        console.error('Error fetching profiles:', profilesError);
-        setError('Failed to load user profiles.');
-        return; // Exit early on error
-      }
-      const newProfilesMap = new Map<string, Partial<ProfileRow>>();
-      (fetchedProfiles || []).forEach(profile => {
-        if (profile.id) {
-          newProfilesMap.set(profile.id, profile);
-        }
-      });
-      setProfilesMap(newProfilesMap); // Update profiles map in state
-
-      // Determine current user's role
-      const currentUserProfile = newProfilesMap.get(currentUserId);
-      setUserRole(currentUserProfile?.role || 'user');
-
-      // --- FETCH THE SPECIFIC QUESTION ---
-      const { data: questionRaw, error: questionError } = await supabase
-        .from('questions')
-        .select('*', {
-          // @ts-ignore
-          next: { tags: ['questions'] },
-        })
-        .eq('id', questionId)
-        .single();
-
-      if (questionError || !questionRaw) {
-        console.error('Error fetching question:', questionError);
-        setError('Failed to load question.');
-        return; // Exit early on error
-      }
-      setQuestion({
-        ...questionRaw,
-        authorProfile: newProfilesMap.get(questionRaw.user_id) || null,
-      });
-
-      // --- FETCH COMMENTS FOR THIS QUESTION ---
-      const { data: commentsRaw, error: commentsError } = await supabase
-        .from('comments')
-        .select('*')
-        .eq('question_id', questionId)
-        .order('is_pinned', { ascending: false })
-        .order('created_at', { ascending: true });
-
-      if (commentsError) {
-        console.error('Error fetching comments:', commentsError);
-        setError('Failed to load comments.');
-        return; // Exit early on error
-      }
-
-      const commentsWithProfiles: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
-        ...comment,
-        authorProfile: newProfilesMap.get(comment.user_id) || null,
-      }));
-      setComments(commentsWithProfiles);
-
-    } catch (err) {
-      console.error('Unexpected error during data fetch:', err);
-      setError('An unexpected error occurred while loading data.');
-    } finally {
-      clearTimeout(loadingTimeout); // Clear timeout if fetch completes
-      setLoading(false); // Always set loading to false
-    }
-  }, [questionId, supabase, router, loading]); // Added 'loading' to dependencies for timeout check
-
+  // Effect for initial data fetching (question, comments, profiles, session)
   useEffect(() => {
-    if (isNaN(questionId)) {
-      setError('Invalid question ID.');
-      setLoading(false);
+    async function fetchData() {
+      setLoading(true);
+      setError(null);
+
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      setSession(currentSession);
+
+      if (!currentSession) {
+        router.push('/login');
+        setLoading(false);
+        return;
+      }
+
+      const currentUserId = currentSession.user.id;
+
+      // Set a timeout for loading
+      const loadingTimeout = setTimeout(() => {
+        if (loading) { // Only show timeout message if still loading
+          setError('Loading is taking longer than expected. Please check your internet connection or try again.');
+          setLoading(false); // Stop loading indicator
+        }
+      }, 15000); // 15 seconds timeout
+
+      try {
+        // --- FETCH ALL PROFILES SEPARATELY FIRST ---
+        const { data: fetchedProfiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, username, avatar_url, role');
+
+        if (profilesError) {
+          console.error('Error fetching profiles:', profilesError);
+          setError('Failed to load user profiles.');
+          return;
+        }
+        const newProfilesMap = new Map<string, Partial<ProfileRow>>();
+        (fetchedProfiles || []).forEach(profile => {
+          if (profile.id) {
+            newProfilesMap.set(profile.id, profile);
+          }
+        });
+        setProfilesMap(newProfilesMap); // Update profiles map in state
+
+        // Determine current user's role
+        const currentUserProfile = newProfilesMap.get(currentUserId);
+        setUserRole(currentUserProfile?.role || 'user');
+
+        // --- FETCH THE SPECIFIC QUESTION ---
+        const { data: questionRaw, error: questionError } = await supabase
+          .from('questions')
+          .select('*', {
+            // @ts-ignore
+            next: { tags: ['questions'] },
+          })
+          .eq('id', questionId)
+          .single();
+
+        if (questionError || !questionRaw) {
+          console.error('Error fetching question:', questionError);
+          setError('Failed to load question.');
+          return;
+        }
+        setQuestion({
+          ...questionRaw,
+          authorProfile: newProfilesMap.get(questionRaw.user_id) || null,
+        });
+
+        // --- FETCH COMMENTS FOR THIS QUESTION ---
+        const { data: commentsRaw, error: commentsError } = await supabase
+          .from('comments')
+          .select('*')
+          .eq('question_id', questionId)
+          .order('is_pinned', { ascending: false })
+          .order('created_at', { ascending: true });
+
+        if (commentsError) {
+          console.error('Error fetching comments:', commentsError);
+          setError('Failed to load comments.');
+          return;
+        }
+
+        const commentsWithProfiles: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
+          ...comment,
+          authorProfile: newProfilesMap.get(comment.user_id) || null,
+        }));
+        setComments(commentsWithProfiles);
+
+      } catch (err) {
+        console.error('Unexpected error during data fetch:', err);
+        setError('An unexpected error occurred while loading data.');
+      } finally {
+        clearTimeout(loadingTimeout); // Clear timeout if fetch completes
+        setLoading(false); // Always set loading to false
+      }
+    }
+
+    if (!isNaN(questionId)) {
+      fetchData();
+    }
+  }, [questionId, supabase, router]); // Dependencies for initial fetch
+
+  // Effect for real-time comments (depends on profilesMap being loaded)
+  useEffect(() => {
+    if (isNaN(questionId) || profilesMap.size === 0) {
+      // Don't set up real-time listener until questionId is valid and profiles are loaded
       return;
     }
 
-    fetchQuestionAndComments(); // Initial fetch
-
-    // --- Real-time Listener for Comments ---
     const commentsChannel = supabase
       .channel(`comments_for_question:${questionId}`)
       .on(
@@ -163,7 +166,6 @@ export default function QuestionPage({ params }: QuestionPageProps) {
             const newCommentData = payload.new as CommentRow;
             const oldCommentData = payload.old as CommentRow;
 
-            // Helper to get a comment with its profile attached using the existing profilesMap
             const getCommentWithProfile = (comment: CommentRow): CommentWithProfile => {
               return {
                 ...comment,
@@ -182,28 +184,25 @@ export default function QuestionPage({ params }: QuestionPageProps) {
               newComments = newComments.filter(c => c.id !== oldCommentData.id);
             }
 
-            // Re-sort comments after any change
             newComments.sort((a, b) => {
               if (a.is_pinned && !b.is_pinned) return -1;
               if (!a.is_pinned && b.is_pinned) return 1;
               return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
             });
 
-            return newComments; // IMPORTANT: Return the updated array synchronously
+            return newComments;
           });
         }
       )
       .subscribe();
 
-    // Cleanup function
     return () => {
       supabase.removeChannel(commentsChannel);
     };
-  }, [questionId, supabase, fetchQuestionAndComments, profilesMap]);
+  }, [questionId, supabase, profilesMap]); // Real-time listener depends on profilesMap
 
   const handlePinToggle = async (commentId: string, isCurrentlyPinned: boolean) => {
-    if (userRole !== 'admin' && userRole !== 'me' && userRole === 'og') { // Corrected logic: should be || for OR
-      // Using a custom modal for alerts would be better here
+    if (userRole !== 'admin' && userRole !== 'me' && userRole !== 'og') { // Corrected: using || for OR
       alert('You do not have permission to pin comments.');
       return;
     }
@@ -219,13 +218,10 @@ export default function QuestionPage({ params }: QuestionPageProps) {
 
       if (!response.ok) {
         const errorData = await response.json();
-        // Using a custom modal for alerts would be better here
         alert(`Failed to update pin status: ${errorData.error}`);
       }
-      // No need for router.refresh() here, real-time listener will update UI
     } catch (err) {
       console.error('Network error during pin toggle:', err);
-      // Using a custom modal for alerts would be better here
       alert('An unexpected error occurred. Please try again.');
     }
   };

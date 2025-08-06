@@ -51,77 +51,84 @@ export default function QuestionPage({ params }: QuestionPageProps) {
 
     if (!currentSession) {
       router.push('/login');
+      setLoading(false); // Ensure loading is false on redirect
       return;
     }
 
     const currentUserId = currentSession.user.id;
 
-    // --- FETCH ALL PROFILES SEPARATELY FIRST ---
-    const { data: fetchedProfiles, error: profilesError } = await supabase
-      .from('profiles')
-      .select('id, username, avatar_url, role');
+    try {
+      // --- FETCH ALL PROFILES SEPARATELY FIRST ---
+      const { data: fetchedProfiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, avatar_url, role');
 
-    if (profilesError) {
-      console.error('Error fetching profiles:', profilesError);
-      setError('Failed to load user profiles.');
-      setLoading(false);
-      return;
-    }
-    const newProfilesMap = new Map<string, Partial<ProfileRow>>();
-    (fetchedProfiles || []).forEach(profile => {
-      if (profile.id) {
-        newProfilesMap.set(profile.id, profile);
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        setError('Failed to load user profiles.');
+        setLoading(false);
+        return;
       }
-    });
-    setProfilesMap(newProfilesMap); // Update profiles map in state
+      const newProfilesMap = new Map<string, Partial<ProfileRow>>();
+      (fetchedProfiles || []).forEach(profile => {
+        if (profile.id) {
+          newProfilesMap.set(profile.id, profile);
+        }
+      });
+      setProfilesMap(newProfilesMap); // Update profiles map in state
 
-    // Determine current user's role
-    const currentUserProfile = newProfilesMap.get(currentUserId);
-    setUserRole(currentUserProfile?.role || 'user');
+      // Determine current user's role
+      const currentUserProfile = newProfilesMap.get(currentUserId);
+      setUserRole(currentUserProfile?.role || 'user');
 
-    // --- FETCH THE SPECIFIC QUESTION ---
-    const { data: questionRaw, error: questionError } = await supabase
-      .from('questions')
-      .select('*', {
-        // @ts-ignore
-        next: { tags: ['questions'] },
-      })
-      .eq('id', questionId)
-      .single();
+      // --- FETCH THE SPECIFIC QUESTION ---
+      const { data: questionRaw, error: questionError } = await supabase
+        .from('questions')
+        .select('*', {
+          // @ts-ignore
+          next: { tags: ['questions'] },
+        })
+        .eq('id', questionId)
+        .single();
 
-    if (questionError || !questionRaw) {
-      console.error('Error fetching question:', questionError);
-      setError('Failed to load question.');
-      setLoading(false);
-      return;
+      if (questionError || !questionRaw) {
+        console.error('Error fetching question:', questionError);
+        setError('Failed to load question.');
+        setLoading(false);
+        return;
+      }
+      setQuestion({
+        ...questionRaw,
+        authorProfile: newProfilesMap.get(questionRaw.user_id) || null,
+      });
+
+      // --- FETCH COMMENTS FOR THIS QUESTION ---
+      const { data: commentsRaw, error: commentsError } = await supabase
+        .from('comments')
+        .select('*')
+        .eq('question_id', questionId)
+        .order('is_pinned', { ascending: false })
+        .order('created_at', { ascending: true });
+
+      if (commentsError) {
+        console.error('Error fetching comments:', commentsError);
+        setError('Failed to load comments.');
+        setLoading(false);
+        return;
+      }
+
+      const commentsWithProfiles: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
+        ...comment,
+        authorProfile: newProfilesMap.get(comment.user_id) || null,
+      }));
+      setComments(commentsWithProfiles);
+    } catch (err) {
+      console.error('Unexpected error during data fetch:', err);
+      setError('An unexpected error occurred while loading data.');
+    } finally {
+      setLoading(false); // Always set loading to false
     }
-    setQuestion({
-      ...questionRaw,
-      authorProfile: newProfilesMap.get(questionRaw.user_id) || null,
-    });
-
-    // --- FETCH COMMENTS FOR THIS QUESTION ---
-    const { data: commentsRaw, error: commentsError } = await supabase
-      .from('comments')
-      .select('*')
-      .eq('question_id', questionId)
-      .order('is_pinned', { ascending: false })
-      .order('created_at', { ascending: true });
-
-    if (commentsError) {
-      console.error('Error fetching comments:', commentsError);
-      setError('Failed to load comments.');
-      setLoading(false);
-      return;
-    }
-
-    const commentsWithProfiles: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
-      ...comment,
-      authorProfile: newProfilesMap.get(comment.user_id) || null,
-    }));
-    setComments(commentsWithProfiles);
-    setLoading(false);
-  }, [questionId, supabase, router]);
+  }, [questionId, supabase, router]); // Dependencies for useCallback
 
   useEffect(() => {
     if (isNaN(questionId)) {
@@ -149,7 +156,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
             const newCommentData = payload.new as CommentRow;
             const oldCommentData = payload.old as CommentRow;
 
-            // Helper to get a comment with its profile attached
+            // Helper to get a comment with its profile attached using the existing profilesMap
             const getCommentWithProfile = (comment: CommentRow): CommentWithProfile => {
               return {
                 ...comment,
@@ -175,7 +182,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
               return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
             });
 
-            return newComments; // <-- IMPORTANT: Return the updated array
+            return newComments; // IMPORTANT: Return the updated array synchronously
           });
         }
       )
@@ -189,6 +196,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
 
   const handlePinToggle = async (commentId: string, isCurrentlyPinned: boolean) => {
     if (userRole !== 'admin' && userRole !== 'me' && userRole !== 'og') {
+      // Using a custom modal for alerts would be better here
       alert('You do not have permission to pin comments.');
       return;
     }
@@ -204,11 +212,13 @@ export default function QuestionPage({ params }: QuestionPageProps) {
 
       if (!response.ok) {
         const errorData = await response.json();
+        // Using a custom modal for alerts would be better here
         alert(`Failed to update pin status: ${errorData.error}`);
       }
       // No need for router.refresh() here, real-time listener will update UI
     } catch (err) {
       console.error('Network error during pin toggle:', err);
+      // Using a custom modal for alerts would be better here
       alert('An unexpected error occurred. Please try again.');
     }
   };

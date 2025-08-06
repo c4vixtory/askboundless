@@ -1,7 +1,7 @@
-'use client'; // <-- ADDED THIS LINE TO MAKE IT A CLIENT COMPONENT
+// Remove: export const dynamic = 'force-dynamic'; // No longer needed, revalidateTag handles freshness
 
 import { useState, useEffect } from 'react'; // Import useState and useEffect
-import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs'; // Use client component client
 import { Database } from '@/types/supabase';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation'; // Import useRouter
@@ -17,16 +17,16 @@ interface QuestionWithProfile extends QuestionRow {
   authorProfile: Partial<ProfileRow> | null; // Profile for the question author
 }
 
-export default function HomePage() { // Changed to a client component function
+export default function HomePage() { // Changed to client component
   const supabase = createClientComponentClient<Database>(); // Use client component client
-  const router = useRouter();
+  const router = useRouter(); // Initialize useRouter
 
-  const [session, setSession] = useState<any>(null);
-  const [twitterUsername, setTwitterUsername] = useState<string>('');
   const [questions, setQuestions] = useState<QuestionWithProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [session, setSession] = useState<any>(null);
   const [profilesMap, setProfilesMap] = useState<Map<string, Partial<ProfileRow>>>(new Map());
+
 
   useEffect(() => {
     async function fetchData() {
@@ -37,111 +37,67 @@ export default function HomePage() { // Changed to a client component function
       setSession(currentSession);
 
       if (!currentSession) {
-        router.push('/login');
+        router.push('/login'); // Redirect if not logged in
+        setLoading(false); // Ensure loading is false on redirect
         return;
       }
 
-      setTwitterUsername(currentSession.user.user_metadata?.user_name || currentSession.user.email);
+      try {
+        // --- FETCH ALL PROFILES SEPARATELY FIRST ---
+        const { data: fetchedProfiles, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, username, avatar_url, role');
 
-      // --- FETCH ALL PROFILES SEPARATELY FIRST ---
-      const { data: fetchedProfiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, username, avatar_url, role');
-
-      if (profilesError) {
-        console.error('Error fetching profiles:', profilesError);
-        setError('Failed to load user profiles.');
-        setLoading(false);
-        return;
-      }
-      const newProfilesMap = new Map<string, Partial<ProfileRow>>();
-      (fetchedProfiles || []).forEach(profile => {
-        if (profile.id) {
-          newProfilesMap.set(profile.id, profile);
+        if (profilesError) {
+          console.error('Error fetching profiles:', profilesError);
+          setError('Failed to load user profiles.');
+          setLoading(false);
+          return;
         }
-      });
-      setProfilesMap(newProfilesMap);
+        const newProfilesMap = new Map<string, Partial<ProfileRow>>();
+        (fetchedProfiles || []).forEach(profile => {
+          if (profile.id) {
+            newProfilesMap.set(profile.id, profile);
+          }
+        });
+        setProfilesMap(newProfilesMap);
 
-      // --- FETCH QUESTIONS (NO JOIN HERE) ---
-      const { data: questionsRaw, error: questionsError } = await supabase
-        .from('questions')
-        .select('*')
-        .order('created_at', { ascending: false });
 
-      if (questionsError) {
-        console.error('Error fetching questions:', questionsError);
-        setError('Failed to load questions.');
-        setLoading(false);
-        return;
+        // --- FETCH QUESTIONS ---
+        const { data: questionsRaw, error: questionsError } = await supabase
+          .from('questions')
+          .select('*', {
+            // @ts-ignore
+            next: { tags: ['questions'] },
+          })
+          .order('created_at', { ascending: false });
+
+        if (questionsError) {
+          console.error('Error fetching questions:', questionsError);
+          setError('Failed to load questions.');
+          setLoading(false);
+          return;
+        }
+
+        const questionsWithProfiles: QuestionWithProfile[] = (questionsRaw || []).map(question => ({
+          ...question,
+          authorProfile: newProfilesMap.get(question.user_id) || null,
+        }));
+        setQuestions(questionsWithProfiles);
+
+      } catch (err) {
+        console.error('Unexpected error during data fetch:', err);
+        setError('An unexpected error occurred while loading data.');
+      } finally {
+        setLoading(false); // Always set loading to false
       }
-
-      // --- MANUALLY JOIN QUESTIONS WITH PROFILES ---
-      const questionsWithProfiles: QuestionWithProfile[] = (questionsRaw || []).map(question => ({
-        ...question,
-        authorProfile: newProfilesMap.get(question.user_id) || null,
-      }));
-      setQuestions(questionsWithProfiles);
-      setLoading(false);
     }
 
     fetchData();
+  }, [supabase, router]); // Dependencies for useEffect
 
-    // Setup real-time listener for questions (optional, but good for instant updates)
-    const questionsChannel = supabase
-      .channel('questions_list_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // Listen for INSERT, UPDATE, DELETE
-          schema: 'public',
-          table: 'questions',
-        },
-        (payload) => {
-          setQuestions(prevQuestions => {
-            let updatedQuestions = [...prevQuestions];
-            const newQuestionData = payload.new as QuestionRow;
-            const oldQuestionData = payload.old as QuestionRow;
 
-            const getQuestionWithProfile = (question: QuestionRow): QuestionWithProfile => {
-              return {
-                ...question,
-                authorProfile: profilesMap.get(question.user_id) || null,
-              };
-            };
-
-            if (payload.eventType === 'INSERT') {
-              updatedQuestions.unshift(getQuestionWithProfile(newQuestionData)); // Add new question to top
-            } else if (payload.eventType === 'UPDATE') {
-              const index = updatedQuestions.findIndex(q => q.id === newQuestionData.id);
-              if (index !== -1) {
-                updatedQuestions[index] = getQuestionWithProfile(newQuestionData);
-              }
-            } else if (payload.eventType === 'DELETE') {
-              updatedQuestions = updatedQuestions.filter(q => q.id !== oldQuestionData.id);
-            }
-
-            // Re-sort if necessary (e.g., if upvotes change, though UpvoteButton handles its own state)
-            updatedQuestions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-            return updatedQuestions;
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(questionsChannel);
-    };
-
-  }, [supabase, router, profilesMap]); // Added profilesMap to dependencies
-
-  if (loading) {
-    return <p className="text-center py-10">Loading questions...</p>;
-  }
-
-  if (error) {
-    return <p className="text-red-500 text-center py-10">{error}</p>;
-  }
+  const twitterUsername = session?.user?.user_metadata?.user_name || session?.user?.email || 'Guest'; // Handle session being null initially
 
   return (
     <div className="space-y-8 p-4 sm:p-6 md:p-8 max-w-4xl mx-auto">
@@ -160,7 +116,16 @@ export default function HomePage() { // Changed to a client component function
 
       <div className="space-y-6">
         <h2 className="text-2xl font-bold text-gray-900">Latest Questions</h2>
-        {questions && questions.length > 0 ? (
+        {loading ? (
+          <div className="p-8 text-center text-gray-500 bg-gray-50 rounded-lg shadow-inner">
+            <p className="text-lg">Loading questions...</p>
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-red-500 bg-red-50 rounded-lg shadow-inner">
+            <p className="text-lg">Error: {error}</p>
+            <p className="text-sm mt-2">Please try refreshing the page.</p>
+          </div>
+        ) : questions.length > 0 ? (
           <ul className="space-y-4">
             {questions.map((question: QuestionWithProfile) => {
               const authorProfile = question.authorProfile;
@@ -203,7 +168,7 @@ export default function HomePage() { // Changed to a client component function
                       <span className="ml-1 mt-1 sm:mt-0 text-gray-500">on {new Date(question.created_at).toLocaleString()}</span>
                     </Link>
                   </div>
-                  <div> {/* UpvoteButton is already a client component */}
+                  <div className="mt-3 sm:mt-0 sm:ml-4 flex-shrink-0">
                     <UpvoteButton initialUpvotes={question.upvotes} questionId={question.id} />
                   </div>
                 </li>

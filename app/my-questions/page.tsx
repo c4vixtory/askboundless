@@ -119,7 +119,8 @@ export default async function MyQuestionsPage() {
                       <span className="ml-1">on {new Date(question.created_at).toLocaleString()}</span>
                     </Link>
                   </div>
-                  <UpvoteButton initialUpvotes={question.upvotes} questionId={question.id} />
+                  {/* NEW: Add key prop to force re-render when upvotes change */}
+                  <UpvoteButton key={question.id + '-' + question.upvotes} initialUpvotes={question.upvotes} questionId={question.id} />
                 </li>
               );
             })}

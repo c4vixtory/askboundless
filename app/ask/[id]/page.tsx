@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react'; // Added useCallback
+import { useState, useEffect, useCallback } from 'react';
 import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Database } from '@/types/supabase';
 import Link from 'next/link';
@@ -39,6 +39,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
   const [error, setError] = useState<string | null>(null);
   const [session, setSession] = useState<any>(null);
   const [userRole, setUserRole] = useState<string>('user');
+  const [profilesMap, setProfilesMap] = useState<Map<string, Partial<ProfileRow>>>(new Map()); // Store profiles map in state
 
   // useCallback to memoize the fetch function, preventing unnecessary re-creations
   const fetchQuestionAndComments = useCallback(async () => {
@@ -66,16 +67,16 @@ export default function QuestionPage({ params }: QuestionPageProps) {
       setLoading(false);
       return;
     }
-    const profilesData = fetchedProfiles || [];
-    const profilesMap = new Map<string, Partial<ProfileRow>>();
-    profilesData.forEach(profile => {
+    const newProfilesMap = new Map<string, Partial<ProfileRow>>();
+    (fetchedProfiles || []).forEach(profile => {
       if (profile.id) {
-        profilesMap.set(profile.id, profile);
+        newProfilesMap.set(profile.id, profile);
       }
     });
+    setProfilesMap(newProfilesMap); // Update profiles map in state
 
     // Determine current user's role
-    const currentUserProfile = profilesMap.get(currentUserId);
+    const currentUserProfile = newProfilesMap.get(currentUserId);
     setUserRole(currentUserProfile?.role || 'user');
 
     // --- FETCH THE SPECIFIC QUESTION ---
@@ -96,7 +97,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
     }
     setQuestion({
       ...questionRaw,
-      authorProfile: profilesMap.get(questionRaw.user_id) || null,
+      authorProfile: newProfilesMap.get(questionRaw.user_id) || null,
     });
 
     // --- FETCH COMMENTS FOR THIS QUESTION ---
@@ -116,11 +117,11 @@ export default function QuestionPage({ params }: QuestionPageProps) {
 
     const commentsWithProfiles: CommentWithProfile[] = (commentsRaw || []).map(comment => ({
       ...comment,
-      authorProfile: profilesMap.get(comment.user_id) || null,
+      authorProfile: newProfilesMap.get(comment.user_id) || null,
     }));
     setComments(commentsWithProfiles);
     setLoading(false);
-  }, [questionId, supabase, router]); // Dependencies for useCallback
+  }, [questionId, supabase, router]);
 
   useEffect(() => {
     if (isNaN(questionId)) {
@@ -145,44 +146,36 @@ export default function QuestionPage({ params }: QuestionPageProps) {
         (payload) => {
           setComments((prevComments) => {
             let newComments = [...prevComments];
-            const newComment = payload.new as CommentRow;
-            const oldComment = payload.old as CommentRow;
+            const newCommentData = payload.new as CommentRow;
+            const oldCommentData = payload.old as CommentRow;
 
-            // Get profile for the new/updated comment
-            const commentAuthorProfile = (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')
-              ? (newComment.user_id ? (newComment as CommentWithProfile).authorProfile || {} : {})
-              : (oldComment.user_id ? (oldComment as CommentWithProfile).authorProfile || {} : {});
+            // Helper to get a comment with its profile attached
+            const getCommentWithProfile = (comment: CommentRow): CommentWithProfile => {
+              return {
+                ...comment,
+                authorProfile: profilesMap.get(comment.user_id) || null,
+              };
+            };
 
-            // Re-fetch profile for new/updated comment to ensure role is current
-            // This is important because the initial payload.new might not have the full profile
-            supabase.from('profiles').select('id, username, avatar_url, role').eq('id', newComment.user_id || oldComment.user_id).single()
-              .then(({ data: profileData }) => {
-                const updatedCommentWithProfile = {
-                  ...(newComment || oldComment),
-                  authorProfile: profileData || null,
-                } as CommentWithProfile;
+            if (payload.eventType === 'INSERT') {
+              newComments.push(getCommentWithProfile(newCommentData));
+            } else if (payload.eventType === 'UPDATE') {
+              const index = newComments.findIndex(c => c.id === newCommentData.id);
+              if (index !== -1) {
+                newComments[index] = getCommentWithProfile(newCommentData);
+              }
+            } else if (payload.eventType === 'DELETE') {
+              newComments = newComments.filter(c => c.id !== oldCommentData.id);
+            }
 
-                if (payload.eventType === 'INSERT') {
-                  newComments.push(updatedCommentWithProfile);
-                } else if (payload.eventType === 'UPDATE') {
-                  const index = newComments.findIndex(c => c.id === updatedCommentWithProfile.id);
-                  if (index !== -1) {
-                    newComments[index] = updatedCommentWithProfile;
-                  }
-                } else if (payload.eventType === 'DELETE') {
-                  newComments = newComments.filter(c => c.id !== oldComment.id);
-                }
+            // Re-sort comments after any change
+            newComments.sort((a, b) => {
+              if (a.is_pinned && !b.is_pinned) return -1;
+              if (!a.is_pinned && b.is_pinned) return 1;
+              return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+            });
 
-                // Re-sort comments after any change
-                newComments.sort((a, b) => {
-                  if (a.is_pinned && !b.is_pinned) return -1;
-                  if (!a.is_pinned && b.is_pinned) return 1;
-                  return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
-                });
-
-                setComments(newComments);
-              })
-              .catch(err => console.error("Error fetching profile for real-time comment:", err));
+            return newComments; // <-- IMPORTANT: Return the updated array
           });
         }
       )
@@ -192,7 +185,7 @@ export default function QuestionPage({ params }: QuestionPageProps) {
     return () => {
       supabase.removeChannel(commentsChannel);
     };
-  }, [questionId, supabase, fetchQuestionAndComments]); // Added fetchQuestionAndComments to dependencies
+  }, [questionId, supabase, fetchQuestionAndComments, profilesMap]); // Added profilesMap to dependencies
 
   const handlePinToggle = async (commentId: string, isCurrentlyPinned: boolean) => {
     if (userRole !== 'admin' && userRole !== 'me' && userRole !== 'og') {

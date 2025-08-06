@@ -49,13 +49,10 @@ export default async function HomePage() {
   });
 
   // --- FETCH QUESTIONS (NO JOIN HERE) ---
-  // NEW: Add next: { tags: ['questions'] } for granular revalidation
   const { data: questionsRaw, error: questionsError } = await supabase
     .from('questions')
     .select('*', {
-      // This option tells Next.js to tag this fetch.
-      // We will invalidate this tag from API routes when questions data changes.
-      // @ts-ignore // Ignore type error for this experimental option
+      // @ts-ignore
       next: { tags: ['questions'] },
     })
     .order('created_at', { ascending: false });
@@ -132,7 +129,8 @@ export default async function HomePage() {
                       <span className="ml-1">on {new Date(question.created_at).toLocaleString()}</span>
                     </Link>
                   </div>
-                  <UpvoteButton initialUpvotes={question.upvotes} questionId={question.id} />
+                  {/* NEW: Add key prop to force re-render when upvotes change */}
+                  <UpvoteButton key={question.id + '-' + question.upvotes} initialUpvotes={question.upvotes} questionId={question.id} />
                 </li>
               );
             })}

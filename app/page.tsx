@@ -92,15 +92,15 @@ export default async function HomePage() {
               const authorProfile = question.authorProfile;
               const twitterProfileUrl = authorProfile?.username ? `https://x.com/${authorProfile.username}` : '#';
               return (
-                <li key={question.id} className="p-4 border border-gray-200 rounded-lg shadow-sm bg-white hover:shadow-md transition-shadow duration-200 flex justify-between items-center">
-                  <div className="flex-grow">
+                <li key={question.id} className="p-4 border border-gray-200 rounded-lg shadow-sm bg-white hover:shadow-md transition-shadow duration-200 flex flex-col sm:flex-row justify-between items-start sm:items-center"> {/* Added flex-col for mobile */}
+                  <div className="flex-grow w-full sm:w-auto"> {/* Ensure it takes full width on mobile */}
                     <h3 className="text-lg font-medium text-gray-900">
                       <Link href={`/ask/${question.id}`} className="hover:underline">
                         {question.title}
                       </Link>
                     </h3>
                     <p className="text-sm text-gray-600 mt-1">{question.details}</p>
-                    <Link href={twitterProfileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center text-xs text-gray-400 mt-2 hover:underline hover:text-blue-500">
+                    <Link href={twitterProfileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center text-xs text-gray-400 mt-2 hover:underline hover:text-blue-500 flex-wrap"> {/* Added flex-wrap */}
                       {authorProfile?.avatar_url && (
                         <img
                           src={authorProfile.avatar_url}
@@ -108,7 +108,7 @@ export default async function HomePage() {
                           className="w-5 h-5 rounded-full mr-2"
                         />
                       )}
-                      <span className="flex items-center">
+                      <span className="flex items-center whitespace-nowrap"> {/* Added whitespace-nowrap */}
                         Asked by {authorProfile?.username || 'Anonymous'}
                         {authorProfile?.role === 'admin' && (
                           <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
@@ -126,11 +126,12 @@ export default async function HomePage() {
                           </span>
                         )}
                       </span>
-                      <span className="ml-1">on {new Date(question.created_at).toLocaleString()}</span>
+                      <span className="ml-1 mt-1 sm:mt-0">on {new Date(question.created_at).toLocaleString()}</span> {/* Adjusted margin */}
                     </Link>
                   </div>
-                  {/* REMOVED key={question.id + '-' + question.upvotes} */}
-                  <UpvoteButton initialUpvotes={question.upvotes} questionId={question.id} />
+                  <div className="mt-3 sm:mt-0 sm:ml-4 flex-shrink-0"> {/* Adjusted margin and flex-shrink */}
+                    <UpvoteButton initialUpvotes={question.upvotes} questionId={question.id} />
+                  </div>
                 </li>
               );
             })}

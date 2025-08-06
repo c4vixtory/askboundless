@@ -1,4 +1,4 @@
-import './globals.css';
+import '../styles/globals.css'; // <-- CORRECTED PATH
 import { Inter } from 'next/font/google';
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';

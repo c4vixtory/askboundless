@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { Database } from '@/types/supabase'; // <-- CORRECTED: 'from' instead of '=>'
+import { Database } from '@/types/supabase'; // <-- CONFIRM THIS IS 'from'
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import UpvoteButton from '@/components/UpvoteButton'; // Re-use UpvoteButton

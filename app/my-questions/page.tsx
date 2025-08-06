@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { Database } from '@/types/supabase';
+import { Database } => '@/types/supabase';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import UpvoteButton from '@/components/UpvoteButton'; // Re-use UpvoteButton
@@ -119,8 +119,8 @@ export default async function MyQuestionsPage() {
                       <span className="ml-1">on {new Date(question.created_at).toLocaleString()}</span>
                     </Link>
                   </div>
-                  {/* NEW: Add key prop to force re-render when upvotes change */}
-                  <UpvoteButton key={question.id + '-' + question.upvotes} initialUpvotes={question.upvotes} questionId={question.id} />
+                  {/* REMOVED key={question.id + '-' + question.upvotes} */}
+                  <UpvoteButton initialUpvotes={question.upvotes} questionId={question.id} />
                 </li>
               );
             })}

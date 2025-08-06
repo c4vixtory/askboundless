@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { Database } => '@/types/supabase';
+import { Database } from '@/types/supabase'; // <-- CORRECTED: 'from' instead of '=>'
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import UpvoteButton from '@/components/UpvoteButton'; // Re-use UpvoteButton
@@ -119,7 +119,6 @@ export default async function MyQuestionsPage() {
                       <span className="ml-1">on {new Date(question.created_at).toLocaleString()}</span>
                     </Link>
                   </div>
-                  {/* REMOVED key={question.id + '-' + question.upvotes} */}
                   <UpvoteButton initialUpvotes={question.upvotes} questionId={question.id} />
                 </li>
               );

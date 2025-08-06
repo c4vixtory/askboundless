@@ -1,10 +1,10 @@
-// Remove: export const dynamic = 'force-dynamic'; // No longer needed, revalidateTag handles freshness
+'use client'; // <-- ADDED THIS LINE TO MAKE IT A CLIENT COMPONENT
 
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { useState, useEffect } from 'react'; // Import useState and useEffect
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
 import { Database } from '@/types/supabase';
 import Link from 'next/link';
-import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation'; // Import useRouter
 import SignOutButton from '@/components/SignOutButton';
 import UpvoteButton from '@/components/UpvoteButton';
 
@@ -17,66 +17,141 @@ interface QuestionWithProfile extends QuestionRow {
   authorProfile: Partial<ProfileRow> | null; // Profile for the question author
 }
 
-export default async function HomePage() {
-  const supabase = createServerComponentClient<Database>({ cookies });
+export default function HomePage() { // Changed to a client component function
+  const supabase = createClientComponentClient<Database>(); // Use client component client
+  const router = useRouter();
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  const [session, setSession] = useState<any>(null);
+  const [twitterUsername, setTwitterUsername] = useState<string>('');
+  const [questions, setQuestions] = useState<QuestionWithProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [profilesMap, setProfilesMap] = useState<Map<string, Partial<ProfileRow>>>(new Map());
 
-  if (!session) {
-    redirect('/login');
-  }
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      setError(null);
 
-  const twitterUsername = session.user.user_metadata?.user_name || session.user.email;
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      setSession(currentSession);
 
-  // --- FETCH ALL PROFILES SEPARATELY FIRST ---
-  const { data: fetchedProfiles, error: profilesError } = await supabase
-    .from('profiles')
-    .select('id, username, avatar_url, role');
+      if (!currentSession) {
+        router.push('/login');
+        return;
+      }
 
-  if (profilesError) {
-    console.error('Error fetching profiles:', profilesError);
-  }
-  const profilesData = fetchedProfiles || [];
+      setTwitterUsername(currentSession.user.user_metadata?.user_name || currentSession.user.email);
 
-  // Create a map for quick profile lookup by ID
-  const profilesMap = new Map<string, Partial<ProfileRow>>();
-  profilesData.forEach(profile => {
-    if (profile.id) {
-      profilesMap.set(profile.id, profile);
+      // --- FETCH ALL PROFILES SEPARATELY FIRST ---
+      const { data: fetchedProfiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, avatar_url, role');
+
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        setError('Failed to load user profiles.');
+        setLoading(false);
+        return;
+      }
+      const newProfilesMap = new Map<string, Partial<ProfileRow>>();
+      (fetchedProfiles || []).forEach(profile => {
+        if (profile.id) {
+          newProfilesMap.set(profile.id, profile);
+        }
+      });
+      setProfilesMap(newProfilesMap);
+
+      // --- FETCH QUESTIONS (NO JOIN HERE) ---
+      const { data: questionsRaw, error: questionsError } = await supabase
+        .from('questions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (questionsError) {
+        console.error('Error fetching questions:', questionsError);
+        setError('Failed to load questions.');
+        setLoading(false);
+        return;
+      }
+
+      // --- MANUALLY JOIN QUESTIONS WITH PROFILES ---
+      const questionsWithProfiles: QuestionWithProfile[] = (questionsRaw || []).map(question => ({
+        ...question,
+        authorProfile: newProfilesMap.get(question.user_id) || null,
+      }));
+      setQuestions(questionsWithProfiles);
+      setLoading(false);
     }
-  });
 
-  // --- FETCH QUESTIONS (NO JOIN HERE) ---
-  const { data: questionsRaw, error: questionsError } = await supabase
-    .from('questions')
-    .select('*', {
-      // @ts-ignore
-      next: { tags: ['questions'] },
-    })
-    .order('created_at', { ascending: false });
+    fetchData();
 
-  if (questionsError) {
-    console.error('Error fetching questions:', questionsError);
-    return <p className="text-red-500 text-center">Failed to load questions.</p>;
+    // Setup real-time listener for questions (optional, but good for instant updates)
+    const questionsChannel = supabase
+      .channel('questions_list_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen for INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'questions',
+        },
+        (payload) => {
+          setQuestions(prevQuestions => {
+            let updatedQuestions = [...prevQuestions];
+            const newQuestionData = payload.new as QuestionRow;
+            const oldQuestionData = payload.old as QuestionRow;
+
+            const getQuestionWithProfile = (question: QuestionRow): QuestionWithProfile => {
+              return {
+                ...question,
+                authorProfile: profilesMap.get(question.user_id) || null,
+              };
+            };
+
+            if (payload.eventType === 'INSERT') {
+              updatedQuestions.unshift(getQuestionWithProfile(newQuestionData)); // Add new question to top
+            } else if (payload.eventType === 'UPDATE') {
+              const index = updatedQuestions.findIndex(q => q.id === newQuestionData.id);
+              if (index !== -1) {
+                updatedQuestions[index] = getQuestionWithProfile(newQuestionData);
+              }
+            } else if (payload.eventType === 'DELETE') {
+              updatedQuestions = updatedQuestions.filter(q => q.id !== oldQuestionData.id);
+            }
+
+            // Re-sort if necessary (e.g., if upvotes change, though UpvoteButton handles its own state)
+            updatedQuestions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+            return updatedQuestions;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(questionsChannel);
+    };
+
+  }, [supabase, router, profilesMap]); // Added profilesMap to dependencies
+
+  if (loading) {
+    return <p className="text-center py-10">Loading questions...</p>;
   }
 
-  // --- MANUALLY JOIN QUESTIONS WITH PROFILES ---
-  const questions: QuestionWithProfile[] = (questionsRaw || []).map(question => ({
-    ...question,
-    authorProfile: profilesMap.get(question.user_id) || null,
-  }));
+  if (error) {
+    return <p className="text-red-500 text-center py-10">{error}</p>;
+  }
 
   return (
-    <div className="space-y-8 p-4 sm:p-6 md:p-8 max-w-4xl mx-auto"> {/* Increased overall spacing, max-width */}
-      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-100 flex flex-col sm:flex-row justify-between items-center text-center sm:text-left"> {/* Rounded-xl, softer shadow, border */}
-        <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4 sm:mb-0"> {/* Larger, bolder text */}
+    <div className="space-y-8 p-4 sm:p-6 md:p-8 max-w-4xl mx-auto">
+      <div className="bg-white p-6 sm:p-8 rounded-xl shadow-md border border-gray-100 flex flex-col sm:flex-row justify-between items-center text-center sm:text-left">
+        <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 mb-4 sm:mb-0">
           Hello, {twitterUsername}
         </h1>
         {session && (
           <div className="flex items-center space-x-4">
-            <Link href="/ask" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5"> {/* More prominent button style */}
+            <Link href="/ask" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded-lg shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5">
               Ask a Question
             </Link>
           </div>
@@ -84,30 +159,30 @@ export default async function HomePage() {
       </div>
 
       <div className="space-y-6">
-        <h2 className="text-2xl font-bold text-gray-900">Latest Questions</h2> {/* Bolder heading */}
+        <h2 className="text-2xl font-bold text-gray-900">Latest Questions</h2>
         {questions && questions.length > 0 ? (
           <ul className="space-y-4">
             {questions.map((question: QuestionWithProfile) => {
               const authorProfile = question.authorProfile;
               const twitterProfileUrl = authorProfile?.username ? `https://x.com/${authorProfile.username}` : '#';
               return (
-                <li key={question.id} className="p-5 border border-gray-200 rounded-xl shadow-sm bg-white hover:shadow-md transition-shadow duration-200 flex flex-col sm:flex-row justify-between items-start sm:items-center"> {/* Rounded-xl, increased padding */}
+                <li key={question.id} className="p-5 border border-gray-200 rounded-xl shadow-sm bg-white hover:shadow-md transition-shadow duration-200 flex flex-col sm:flex-row justify-between items-start sm:items-center">
                   <div className="flex-grow w-full sm:w-auto">
-                    <h3 className="text-lg font-semibold text-gray-900"> {/* Bolder title */}
-                      <Link href={`/ask/${question.id}`} className="hover:underline text-blue-700 hover:text-blue-800"> {/* Blue link color */}
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      <Link href={`/ask/${question.id}`} className="hover:underline text-blue-700 hover:text-blue-800">
                         {question.title}
                       </Link>
                     </h3>
-                    <p className="text-sm text-gray-700 mt-1">{question.details}</p> {/* Darker text */}
+                    <p className="text-sm text-gray-700 mt-1">{question.details}</p>
                     <Link href={twitterProfileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center text-xs text-gray-500 mt-2 hover:underline hover:text-blue-500 flex-wrap">
                       {authorProfile?.avatar_url && (
                         <img
                           src={authorProfile.avatar_url}
                           alt="Author Avatar"
-                          className="w-5 h-5 rounded-full mr-2 border border-gray-300" {/* Subtle border for avatar */}
+                          className="w-5 h-5 rounded-full mr-2 border border-gray-300"
                         />
                       )}
-                      <span className="flex items-center whitespace-nowrap font-medium"> {/* Medium font weight */}
+                      <span className="flex items-center whitespace-nowrap font-medium">
                         Asked by {authorProfile?.username || 'Anonymous'}
                         {authorProfile?.role === 'admin' && (
                           <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-semibold rounded-full">
@@ -125,10 +200,10 @@ export default async function HomePage() {
                           </span>
                         )}
                       </span>
-                      <span className="ml-1 mt-1 sm:mt-0 text-gray-500">on {new Date(question.created_at).toLocaleString()}</span> {/* Consistent gray */}
+                      <span className="ml-1 mt-1 sm:mt-0 text-gray-500">on {new Date(question.created_at).toLocaleString()}</span>
                     </Link>
                   </div>
-                  <div className="mt-3 sm:mt-0 sm:ml-4 flex-shrink-0">
+                  <div> {/* UpvoteButton is already a client component */}
                     <UpvoteButton initialUpvotes={question.upvotes} questionId={question.id} />
                   </div>
                 </li>

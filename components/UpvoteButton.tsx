@@ -11,47 +11,114 @@ interface UpvoteButtonProps {
 }
 
 export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButtonProps) {
-  // Initialize upvotes state directly from the prop
   const [upvotes, setUpvotes] = useState(initialUpvotes);
   const [hasUpvoted, setHasUpvoted] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // Manages initial load and API call state
   const router = useRouter();
   const supabase = createClientComponentClient<Database>();
 
-  // This useEffect will now only synchronize the internal state with the prop
-  // when the prop itself changes (which it should, as the parent is now force-refreshing)
   useEffect(() => {
-    setUpvotes(initialUpvotes);
-  }, [initialUpvotes]);
+    let unsubscribeUpvotes: () => void;
+    let unsubscribeUserUpvotes: () => void;
 
-
-  useEffect(() => {
-    async function checkUpvoteStatus() {
+    async function setupRealtimeListeners() {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
+      const currentUserId = user?.id;
 
-      if (user) {
+      // --- 1. Initial Fetch for Upvote Count ---
+      const { data: questionData, error: questionError } = await supabase
+        .from('questions')
+        .select('upvotes')
+        .eq('id', questionId)
+        .single();
+
+      if (questionError) {
+        console.error('Error fetching initial question upvotes:', questionError);
+      } else if (questionData) {
+        setUpvotes(questionData.upvotes);
+      }
+
+      // --- 2. Initial Fetch for User's Upvote Status ---
+      if (currentUserId) {
         const { count, error } = await supabase
           .from('user_upvotes')
           .select('*', { count: 'exact' })
-          .eq('user_id', user.id)
+          .eq('user_id', currentUserId)
           .eq('question_id', questionId);
 
         if (error) {
-          console.error('Error checking upvote status:', error);
+          console.error('Error checking initial user upvote status:', error);
         } else {
           setHasUpvoted(count > 0);
         }
       }
-      setLoading(false);
+      setLoading(false); // Initial loading complete
+
+      // --- 3. Real-time Listener for Question Upvotes ---
+      const upvotesChannel = supabase
+        .channel(`question_upvotes:${questionId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: 'UPDATE',
+            schema: 'public',
+            table: 'questions',
+            filter: `id=eq.${questionId}`,
+          },
+          (payload) => {
+            const newUpvotes = (payload.new as Database['public']['Tables']['questions']['Row']).upvotes;
+            if (typeof newUpvotes === 'number') {
+              setUpvotes(newUpvotes);
+            }
+          }
+        )
+        .subscribe();
+
+      unsubscribeUpvotes = () => {
+        supabase.removeChannel(upvotesChannel);
+      };
+
+      // --- 4. Real-time Listener for User's Specific Upvote ---
+      if (currentUserId) {
+        const userUpvotesChannel = supabase
+          .channel(`user_upvote:${currentUserId}:${questionId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*', // Listen for INSERT or DELETE events
+              schema: 'public',
+              table: 'user_upvotes',
+              filter: `user_id=eq.${currentUserId}&question_id=eq.${questionId}`,
+            },
+            (payload) => {
+              if (payload.eventType === 'INSERT') {
+                setHasUpvoted(true);
+              } else if (payload.eventType === 'DELETE') {
+                setHasUpvoted(false);
+              }
+            }
+          )
+          .subscribe();
+
+        unsubscribeUserUpvotes = () => {
+          supabase.removeChannel(userUpvotesChannel);
+        };
+      }
+
+      // Cleanup function for useEffect
+      return () => {
+        if (unsubscribeUpvotes) unsubscribeUpvotes();
+        if (unsubscribeUserUpvotes) unsubscribeUserUpvotes();
+      };
     }
 
-    checkUpvoteStatus();
-  }, [questionId, supabase]);
+    setupRealtimeListeners();
+  }, [questionId, supabase]); // Dependencies: questionId and supabase client
 
   const handleUpvote = async () => {
-    if (loading) return;
-    setLoading(true);
+    if (loading) return; // Prevent multiple clicks during API call
+    setLoading(true); // Set loading state for the click action
 
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -62,6 +129,7 @@ export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButto
     }
 
     try {
+      // API call to toggle upvote status in the database
       const response = await fetch('/api/upvote', {
         method: 'POST',
         headers: {
@@ -70,22 +138,18 @@ export default function UpvoteButton({ initialUpvotes, questionId }: UpvoteButto
         body: JSON.stringify({ questionId, userId: user.id, isCurrentlyUpvoted: hasUpvoted }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        // Update local state immediately for responsiveness
-        setUpvotes(data.newUpvoteCount);
-        setHasUpvoted(!hasUpvoted);
-        router.refresh(); // Trigger a full page re-render
-      } else {
+      if (!response.ok) {
         const errorData = await response.json();
-        console.error('Failed to update upvote:', errorData.error);
+        console.error('Failed to update upvote via API:', errorData.error);
         alert(`Failed to update upvote: ${errorData.error}`);
       }
+      // No need to update local state here, real-time listener will handle it
+      // No need for router.refresh() here either, real-time listener will update UI
     } catch (error) {
-      console.error('Network error during upvote:', error);
+      console.error('Network error during upvote API call:', error);
       alert('An unexpected error occurred. Please try again.');
     } finally {
-      setLoading(false);
+      setLoading(false); // Reset loading state
     }
   };
 
